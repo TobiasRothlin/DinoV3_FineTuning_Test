@@ -1,0 +1,8 @@
+# Common libraries shared across all DGX Spark training projects.
+# torch / torchvision come from the NGC PyTorch base image — do NOT add them here.
+numpy
+tqdm
+torchinfo
+mlflow
+transformers
+huggingface_hub

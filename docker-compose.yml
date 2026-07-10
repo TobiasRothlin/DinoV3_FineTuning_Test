@@ -1,0 +1,29 @@
+services:
+  train:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dinov3-finetune:latest
+    # Access all GPUs on the DGX Spark.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      # Persist teacher checkpoints on the host.
+      - ./checkpoints:/app/checkpoints
+      # Shared HF cache reused across all projects (named volume).
+      - hf_cache:/hf_cache
+      # Bind-mount your dataset (adjust host path as needed).
+      - ./data:/data:ro
+    # Give the container enough shared memory for DataLoader workers.
+    shm_size: "16gb"
+
+volumes:
+  hf_cache:
+    # Shared across every project's compose file so downloads dedupe.
+    name: dgx_hf_cache
+    external: false

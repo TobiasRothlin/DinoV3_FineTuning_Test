@@ -1,0 +1,34 @@
+# ---------------------------------------------------------------------------
+# Universal training base image for DGX Spark (GB10, arm64 / sbsa).
+#
+# Build ONCE on the Spark and reuse for every training project:
+#   docker build -f Dockerfile.base -t dgx-train-base:latest .
+#
+# NOTE: The NGC PyTorch image ships multi-arch manifests, so this same tag
+# resolves to the arm64/sbsa build automatically on the GB10 Grace-Blackwell
+# hardware. Pin the tag for reproducibility; bump deliberately for newer CUDA.
+# ---------------------------------------------------------------------------
+FROM nvcr.io/nvidia/pytorch:25.12-py3
+
+# Neutral working directory — projects are bind-mounted or COPY'd by children.
+WORKDIR /workspace
+
+# Shared Hugging Face cache location (mount a named volume here across projects
+# so model downloads are deduplicated).
+ENV HF_HOME=/hf_cache
+
+# Reduce CUDA memory fragmentation: lets the caching allocator grow segments
+# instead of forcing fixed-size blocks. Usually resolves epoch-boundary OOMs.
+ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+# Common libraries shared by all training projects. torch/torchvision are
+# already provided by the NGC base, so they are intentionally NOT listed here.
+COPY requirements-base.txt ./
+RUN pip install --no-cache-dir -r requirements-base.txt
+
+# Persist the shared HF cache.
+VOLUME ["/hf_cache"]
+
+# No fixed ENTRYPOINT — children set their own command, or you pass one at
+# `docker run`. Default to an interactive shell for ad-hoc use.
+CMD ["bash"]

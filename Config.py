@@ -44,6 +44,28 @@ class Config:
     mean = [0.4114, 0.4183, 0.4359]
     std = [0.3005, 0.2981, 0.2966]
 
+
+
+    # Model Config
+    base_model = "facebook/dinov3-vitl16-pretrain-lvd1689m"
+    output_dim = 65536
+
+    # Training Loop Config
+    epochs = 100
+    batch_size = 16
+    learning_rate = 1e-4
+    weight_decay = 0.04
+    accumulation_steps = 32
+
+    # Checkpointing
+    checkpoint_dir = "./checkpoints"
+    save_every_epochs = 1
+
+    # Loss Weights
+    lambda_dino = 1.0
+    lambda_ibot = 1.0
+    lambda_koleo = 0.1
+
     @staticmethod
     def get_config():
         """Returns the configuration as a dictionary."""

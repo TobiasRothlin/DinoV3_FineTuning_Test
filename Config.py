@@ -52,10 +52,10 @@ class Config:
 
     # Training Loop Config
     epochs = 100
-    batch_size = 16
+    batch_size = 32
     learning_rate = 1e-4
     weight_decay = 0.04
-    accumulation_steps = 32
+    accumulation_steps = 16
 
     # Checkpointing
     checkpoint_dir = "./checkpoints"

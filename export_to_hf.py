@@ -11,18 +11,10 @@ backbone weights, and writes a directory that can be loaded with
 Optionally pushes the result to the Hub.
 
 Usage:
-    python export_to_hf.py \
-        --checkpoint checkpoints/teacher_epoch99.pt \
-        --output exported/dinov3-vitl16-finetuned
-
-    # And optionally push:
-    python export_to_hf.py \
-        --checkpoint checkpoints/last.pt \
-        --output exported/dinov3-vitl16-finetuned \
-        --push-to-hub your-username/dinov3-vitl16-finetuned
+    Edit the configuration constants below, then run:
+        python export_to_hf.py
 """
 
-import argparse
 import json
 import os
 
@@ -32,6 +24,19 @@ from transformers import AutoImageProcessor, AutoModel
 
 
 BACKBONE_PREFIX = "backbone."
+
+# --- Configuration ---------------------------------------------------------
+# Path to teacher_epochN.pt or last.pt saved by main.py
+CHECKPOINT = "checkpoints/teacher_epoch99.pt"
+# Directory to save the Hugging Face model to
+OUTPUT = "exported/dinov3-vitl16-finetuned"
+# Original model ID used to initialize training (for config/architecture)
+BASE_MODEL = "facebook/dinov3-vitl16-pretrain-lvd1689m"
+# Optional Hub repo id (e.g. 'user/my-dinov3'). If set, pushes the model.
+PUSH_TO_HUB = None
+# If pushing to the Hub, create the repo as private.
+PRIVATE = False
+# ---------------------------------------------------------------------------
 
 
 def _hf_login() -> None:
@@ -76,43 +81,15 @@ def extract_backbone_state_dict(state_dict: dict) -> dict:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--checkpoint",
-        required=True,
-        help="Path to teacher_epochN.pt or last.pt saved by main.py",
-    )
-    parser.add_argument(
-        "--output",
-        required=True,
-        help="Directory to save the Hugging Face model to",
-    )
-    parser.add_argument(
-        "--base-model",
-        default="facebook/dinov3-vitl16-pretrain-lvd1689m",
-        help="Original model ID used to initialize training (for config/architecture)",
-    )
-    parser.add_argument(
-        "--push-to-hub",
-        default=None,
-        help="Optional Hub repo id (e.g. 'user/my-dinov3'). If provided, pushes the model.",
-    )
-    parser.add_argument(
-        "--private",
-        action="store_true",
-        help="If pushing to the Hub, create the repo as private.",
-    )
-    args = parser.parse_args()
-
     _hf_login()
 
-    print(f"Loading checkpoint: {args.checkpoint}")
-    state_dict = load_teacher_state_dict(args.checkpoint)
+    print(f"Loading checkpoint: {CHECKPOINT}")
+    state_dict = load_teacher_state_dict(CHECKPOINT)
     backbone_sd = extract_backbone_state_dict(state_dict)
     print(f"Extracted {len(backbone_sd)} backbone tensors")
 
-    print(f"Instantiating base model: {args.base_model}")
-    model = AutoModel.from_pretrained(args.base_model)
+    print(f"Instantiating base model: {BASE_MODEL}")
+    model = AutoModel.from_pretrained(BASE_MODEL)
 
     missing, unexpected = model.load_state_dict(backbone_sd, strict=False)
     if missing:
@@ -122,29 +99,29 @@ def main() -> None:
     if not missing and not unexpected:
         print("All backbone weights loaded cleanly.")
 
-    os.makedirs(args.output, exist_ok=True)
-    print(f"Saving model to: {args.output}")
-    model.save_pretrained(args.output)
+    os.makedirs(OUTPUT, exist_ok=True)
+    print(f"Saving model to: {OUTPUT}")
+    model.save_pretrained(OUTPUT)
 
     # Save the matching image processor so downstream users get identical preprocessing.
     try:
-        processor = AutoImageProcessor.from_pretrained(args.base_model)
-        processor.save_pretrained(args.output)
+        processor = AutoImageProcessor.from_pretrained(BASE_MODEL)
+        processor.save_pretrained(OUTPUT)
         print("Saved matching image processor.")
     except Exception as e:  # noqa: BLE001
         print(f"[warn] Could not save image processor: {e}")
 
-    if args.push_to_hub:
-        print(f"Pushing to Hub repo: {args.push_to_hub} (private={args.private})")
-        model.push_to_hub(args.push_to_hub, private=args.private)
+    if PUSH_TO_HUB:
+        print(f"Pushing to Hub repo: {PUSH_TO_HUB} (private={PRIVATE})")
+        model.push_to_hub(PUSH_TO_HUB, private=PRIVATE)
         try:
-            processor.push_to_hub(args.push_to_hub, private=args.private)
+            processor.push_to_hub(PUSH_TO_HUB, private=PRIVATE)
         except Exception as e:  # noqa: BLE001
             print(f"[warn] Could not push processor: {e}")
         print("Push complete.")
 
     print("Done. Reload with:")
-    print(f"    AutoModel.from_pretrained('{args.push_to_hub or args.output}')")
+    print(f"    AutoModel.from_pretrained('{PUSH_TO_HUB or OUTPUT}')")
 
 
 if __name__ == "__main__":

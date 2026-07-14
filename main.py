@@ -24,7 +24,7 @@ def main():
 
     # 2. Dataset and DataLoader Initialization
     # Update this path to where your reactor images are stored on the DGX
-    dataset_path = r"E:\Alpha1\Alpha2"
+    dataset_path = r"/data"
     print(f"Loading dataset from: {dataset_path}")
 
     dataset = DinoDataset(folder_path=dataset_path, high_res=False)

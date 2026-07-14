@@ -37,7 +37,7 @@ docker build -t dinov3-finetune .
 docker run --gpus all \
   -v "$PWD/checkpoints:/app/checkpoints" \
   -v dgx_hf_cache:/hf_cache \
-  -v /path/to/data:/data:ro \
+  -v /home/spark/Datasets/AGI:/data:ro \
   --shm-size 16g \
   dinov3-finetune
 ```

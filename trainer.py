@@ -1,7 +1,7 @@
 import os
 import torch
 import torch.nn as nn
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 from tqdm import tqdm
 import random
 
@@ -29,7 +29,7 @@ class DinoV3Trainer:
         self.device = device
 
         # Initialize Mixed Precision Scaler for DGX memory efficiency
-        self.scaler = GradScaler()
+        self.scaler = GradScaler("cuda")
 
         # Initialize the EMA Updater
         self.updater = TeacherUpdater(self.student, self.teacher, self.gram_teacher)
@@ -39,6 +39,14 @@ class DinoV3Trainer:
         self.ibot_loss_fn = iBOTLoss().to(device)
         self.koleo_loss_fn = KoleoLoss().to(device)
 
+        # Derive the iBOT patch grid from the actual crop size and backbone patch size,
+        # so future changes to Config.global_size (or model) don't silently desync the mask.
+        patch_size = getattr(self.student.backbone.config, "patch_size", 16)
+        self.global_grid = (
+            Config.global_size[0] // patch_size,
+            Config.global_size[1] // patch_size,
+        )
+
         # Ensure checkpoint directory exists
         os.makedirs(Config.checkpoint_dir, exist_ok=True)
         self.global_step = 0
@@ -46,10 +54,16 @@ class DinoV3Trainer:
     def generate_ibot_mask(self, batch_size, seq_len):
         """
         Implements block-wise masking for iBOT.
-        seq_len corresponds to the number of patches (e.g., 28 * 16 for a global crop).
+        seq_len corresponds to the number of patches for a global crop
+        (e.g. 28 * 10 = 280 for a 448x160 crop with patch size 16).
         """
-        # Assuming your grid is square for simplicity, but adjust for (28, 16)
-        grid_h, grid_w = 28, 16
+        grid_h, grid_w = self.global_grid
+        if grid_h * grid_w != seq_len:
+            raise ValueError(
+                f"iBOT mask/token mismatch: grid={grid_h}x{grid_w}={grid_h * grid_w} "
+                f"but student produced seq_len={seq_len}. Check Config.global_size "
+                f"and the backbone patch size."
+            )
 
         mask = torch.zeros(batch_size, grid_h, grid_w, device=self.device, dtype=torch.bool)
 
@@ -86,7 +100,7 @@ class DinoV3Trainer:
             local_crops = crops[2:]
 
             # --- FORWARD PASS (Mixed Precision) ---
-            with autocast():
+            with autocast("cuda"):
                 # 1. Teacher Forward (Global Crops Only)
                 with torch.no_grad():
                     teacher_global_1 = self.teacher(global_crops[0])

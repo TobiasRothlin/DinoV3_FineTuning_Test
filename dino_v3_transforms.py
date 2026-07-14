@@ -1,58 +1,83 @@
-import random
-from PIL import ImageFilter
 import torchvision.transforms as T
+import torch
+
+from Config import Config
 
 
 class CustomDomainMultiCropTransform:
     def __init__(
             self,
-            global_size=(448, 256),  # Bumped up from 256 for finer detail
-            local_size=(224, 128),  # Bumped up from 112
-            global_crops_scale=(0.4, 1.0),
-            local_crops_scale=(0.15, 0.4),  # Shifted up from 0.05 to avoid blank patches
-            num_local_crops=6  # Reduced from 8 to save VRAM on the DGX
+            global_size=Config.global_size,
+            local_size=Config.local_size,
+            global_crops_scale=Config.global_crops_scale,
+            local_crops_scale=Config.local_crops_scale,
+            num_local_crops=Config.num_local_crops,
+            for_training=False,
+            high_res=False,
     ):
         self.num_local_crops = num_local_crops
 
-        # Standard ImageNet stats (Calculate your domain's exact mean/std for better results)
-        normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        global_ratio_target = global_size[1] / global_size[0]  # 160 / 448 = ~0.357
+        global_ratio = (global_ratio_target * Config.ratio_margin_low,
+                        global_ratio_target * Config.ratio_margin_high)
 
-        # Strong color augmentations are safe and encouraged for true RGB
-        color_jitter = T.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)
+        local_ratio_target = local_size[1] / local_size[0]  # 128 / 224 = ~0.571
+        local_ratio = (local_ratio_target * Config.ratio_margin_low,
+                       local_ratio_target * Config.ratio_margin_high)
 
-        # 1. Global Crop 1: Standard DINO augmentations
-        self.global_transform_1 = T.Compose([
-            T.RandomResizedCrop(global_size, scale=global_crops_scale, interpolation=T.InterpolationMode.BICUBIC),
-            T.RandomHorizontalFlip(p=0.5),
-            T.RandomApply([color_jitter], p=0.8),
-            T.RandomGrayscale(p=0.2),
-            T.RandomApply([T.GaussianBlur(kernel_size=9, sigma=(0.1, 2.0))], p=1.0),
-            T.ToTensor(),
-            normalize,
-        ])
+        if high_res:
+            global_size = (global_size[0] * 2, global_size[1] * 2)
 
-        # 2. Global Crop 2: Less blur, adds Solarization[cite: 1]
-        self.global_transform_2 = T.Compose([
-            T.RandomResizedCrop(global_size, scale=global_crops_scale, interpolation=T.InterpolationMode.BICUBIC),
-            T.RandomHorizontalFlip(p=0.5),
-            T.RandomApply([color_jitter], p=0.8),
-            T.RandomGrayscale(p=0.2),
-            T.RandomApply([T.GaussianBlur(kernel_size=9, sigma=(0.1, 2.0))], p=0.1),
-            T.RandomSolarize(threshold=128, p=0.2),
-            T.ToTensor(),
-            normalize,
-        ])
+        color_jitter = T.ColorJitter(
+            brightness=Config.jitter_brightness,
+            contrast=Config.jitter_contrast,
+            saturation=Config.jitter_saturation,
+            hue=Config.jitter_hue
+        )
 
-        # 3. Local Crops: Highly distorted, small patches
-        self.local_transform = T.Compose([
-            T.RandomResizedCrop(local_size, scale=local_crops_scale, interpolation=T.InterpolationMode.BICUBIC),
-            T.RandomHorizontalFlip(p=0.5),
-            T.RandomApply([color_jitter], p=0.8),
-            T.RandomGrayscale(p=0.2),
-            T.RandomApply([T.GaussianBlur(kernel_size=9, sigma=(0.1, 2.0))], p=0.5),
-            T.ToTensor(),
-            normalize,
-        ])
+        global_aug_1 = [
+            T.RandomResizedCrop(global_size, scale=global_crops_scale, ratio=global_ratio,
+                                interpolation=T.InterpolationMode.BICUBIC),
+            T.RandomHorizontalFlip(p=Config.horizontal_flip_p),
+            T.RandomApply([color_jitter], p=Config.color_jitter_p),
+            T.RandomGrayscale(p=Config.grayscale_p),
+            T.RandomApply([T.GaussianBlur(kernel_size=Config.blur_kernel_size, sigma=Config.blur_sigma)],
+                          p=Config.global_blur_1_p),
+        ]
+
+        global_aug_2 = [
+            T.RandomResizedCrop(global_size, scale=global_crops_scale, ratio=global_ratio,
+                                interpolation=T.InterpolationMode.BICUBIC),
+            T.RandomHorizontalFlip(p=Config.horizontal_flip_p),
+            T.RandomApply([color_jitter], p=Config.color_jitter_p),
+            T.RandomGrayscale(p=Config.grayscale_p),
+            T.RandomApply([T.GaussianBlur(kernel_size=Config.blur_kernel_size, sigma=Config.blur_sigma)],
+                          p=Config.global_blur_2_p),
+            T.RandomSolarize(threshold=Config.solarize_threshold, p=Config.solarize_p),
+        ]
+
+        local_aug = [
+            T.RandomResizedCrop(local_size, scale=local_crops_scale, ratio=local_ratio,
+                                interpolation=T.InterpolationMode.BICUBIC),
+            T.RandomHorizontalFlip(p=Config.horizontal_flip_p),
+            T.RandomApply([color_jitter], p=Config.color_jitter_p),
+            T.RandomGrayscale(p=Config.grayscale_p),
+            T.RandomApply([T.GaussianBlur(kernel_size=Config.blur_kernel_size, sigma=Config.blur_sigma)],
+                          p=Config.local_blur_p),
+        ]
+
+        # 2. TENSOR CONVERSION FOR TRAINING:
+        if for_training:
+            normalize = T.Normalize(mean=Config.mean, std=Config.std)
+            tensor_transforms = [T.ToTensor(), normalize]
+
+            global_aug_1.extend(tensor_transforms)
+            global_aug_2.extend(tensor_transforms)
+            local_aug.extend(tensor_transforms)
+
+        self.global_transform_1 = T.Compose(global_aug_1)
+        self.global_transform_2 = T.Compose(global_aug_2)
+        self.local_transform = T.Compose(local_aug)
 
     def __call__(self, image):
         crops = []
@@ -65,3 +90,14 @@ class CustomDomainMultiCropTransform:
             crops.append(self.local_transform(image))
 
         return crops
+
+    @staticmethod
+    def to_image(tensor):
+        """Convert a tensor back to a PIL image."""
+        unnormalize = T.Normalize(
+            mean=[-m / s for m, s in zip(Config.mean, Config.std)],
+            std=[1 / s for s in Config.std]
+        )
+        tensor = unnormalize(tensor)
+        tensor = torch.clamp(tensor, 0, 1)  # Ensure values are in [0, 1]
+        return T.ToPILImage()(tensor)

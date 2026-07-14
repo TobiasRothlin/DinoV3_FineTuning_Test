@@ -1,4 +1,3 @@
 # Project-specific extras only — shared libs live in requirements-base.txt.
 matplotlib
 Pillow
-terratorch

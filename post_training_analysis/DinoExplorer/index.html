@@ -53,6 +53,9 @@
                 <button id="tabBtn3" onclick="showTab('tabClsSimilarity')" class="whitespace-nowrap py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium text-sm transition">
                     CLS Similarity
                 </button>
+                <button id="tabBtn4" onclick="showTab('tabPatchPrototype')" class="whitespace-nowrap py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium text-sm transition">
+                    Patch Prototype
+                </button>
                 <button class="whitespace-nowrap py-4 px-1 border-b-2 border-transparent text-gray-500 font-medium text-sm transition cursor-not-allowed opacity-50" title="Coming Soon">
                     Attention Maps (Soon)
                 </button>
@@ -297,6 +300,84 @@
             </div>
         </div>
 
+        <!-- Tab Content: Patch Prototype -->
+        <div id="tabPatchPrototype" class="flex flex-col gap-4 hidden">
+
+            <div class="flex justify-between items-end flex-wrap gap-4">
+                <h2 class="text-xl font-semibold">Patch Prototype Classifier</h2>
+                <p class="text-sm text-gray-500">Select patches to build named prototypes, then match them across images.</p>
+            </div>
+
+            <div class="flex flex-col xl:flex-row gap-6 items-start">
+                <!-- Left: Prototypes + controls -->
+                <div class="bg-white p-4 rounded-lg shadow flex flex-col xl:flex-none w-full xl:w-80 gap-3">
+                    <p class="font-medium text-gray-700">Prototypes</p>
+
+                    <!-- Create from current selection -->
+                    <div class="flex flex-col gap-2 p-2 rounded border border-gray-200 bg-gray-50">
+                        <div class="flex items-center gap-2">
+                            <input id="ppProtoName" type="text" placeholder="Prototype name" class="flex-1 min-w-0 px-2 py-1 text-xs border border-gray-300 rounded" />
+                            <input id="ppProtoColor" type="color" value="#ef4444" class="w-8 h-7 p-0 border border-gray-300 rounded cursor-pointer" />
+                        </div>
+                        <button id="ppCreateBtn" onclick="ppCreatePrototype()" class="px-2 py-1 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 transition">Create from selection</button>
+                        <div class="flex items-center gap-2">
+                            <button id="ppAddBtn" onclick="ppAddToActive()" class="flex-1 px-2 py-1 text-xs font-medium rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 transition">Add selection to active</button>
+                            <button id="ppClearSelBtn" onclick="ppClearSelection()" class="px-2 py-1 text-xs font-medium rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 transition">Clear</button>
+                        </div>
+                        <p id="ppSelInfo" class="text-xs text-gray-500">0 patch(es) selected.</p>
+                    </div>
+
+                    <div id="ppProtoList" class="flex flex-col gap-2 overflow-y-auto pr-1" style="max-height: 32vh;"></div>
+
+                    <!-- Overlay controls -->
+                    <div class="flex flex-col gap-2 pt-2 border-t border-gray-200">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-600">Overlay</span>
+                            <button id="ppOverlayBtn" onclick="ppToggleOverlay()" class="px-3 py-1 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 transition">On</button>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <label for="ppThresholdSlider" class="text-sm text-gray-600">Threshold</label>
+                            <input id="ppThresholdSlider" type="range" min="0" max="1" step="0.01" value="0.50" class="flex-1 accent-blue-600">
+                            <span id="ppThresholdVal" class="text-xs text-gray-500 w-8">0.50</span>
+                        </div>
+                    </div>
+
+                    <!-- Hovered-patch preview -->
+                    <div class="flex flex-col items-center gap-1 pt-2 border-t border-gray-200">
+                        <span class="text-xs text-gray-500 self-start">Patch preview</span>
+                        <canvas id="ppPreviewCanvas" width="160" height="160" class="border border-gray-300 rounded bg-gray-100" style="width:160px;height:160px;image-rendering:pixelated;"></canvas>
+                        <span id="ppPreviewLabel" class="text-xs text-gray-600 h-4"></span>
+                    </div>
+                </div>
+
+                <!-- Center: Working image canvas (prominent) -->
+                <div class="bg-white p-4 rounded-lg shadow flex flex-col items-center xl:flex-1 min-w-0 w-full">
+                    <div class="w-full flex justify-between items-center mb-2">
+                        <p class="font-medium text-gray-700">Working Image <span id="ppActiveName" class="text-xs font-normal text-gray-500"></span></p>
+                        <p class="text-xs text-gray-500">Hover to preview · click patches to select</p>
+                    </div>
+                    <div class="relative max-w-full overflow-hidden border border-gray-300 rounded bg-gray-100 mx-auto" id="ppCanvasContainer" style="height: 74vh; min-height: 460px;">
+                        <canvas id="ppCanvas" class="absolute top-0 left-0 w-full h-full cursor-crosshair"></canvas>
+                    </div>
+                    <p id="ppCoords" class="text-xs text-gray-500 mt-2 h-4"></p>
+                </div>
+
+                <!-- Right: Image strip + upload -->
+                <div class="bg-white p-4 rounded-lg shadow flex flex-col xl:flex-none w-full xl:w-72 gap-3">
+                    <p class="font-medium text-gray-700">Images</p>
+                    <input type="file" id="ppFileInput" accept="image/*" multiple class="hidden" onchange="ppUploadImages(this.files)">
+                    <div id="ppDropzone" class="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:bg-gray-50 transition cursor-pointer text-sm text-gray-500">
+                        Drop images here or click to add
+                    </div>
+                    <p id="ppStatus" class="text-xs text-gray-500 h-4"></p>
+                    <div id="ppProgress" class="w-full h-2 bg-gray-200 rounded overflow-hidden hidden">
+                        <div id="ppProgressBar" class="h-full bg-blue-600 transition-all duration-200" style="width: 0%;"></div>
+                    </div>
+                    <div id="ppImageStrip" class="flex flex-col gap-2 overflow-y-auto pr-1" style="max-height: 62vh;"></div>
+                </div>
+            </div>
+        </div>
+
     </main>
 
     <script>
@@ -453,16 +534,20 @@
             const isSim = tabId === 'tabPatchSimilarity';
             const isEmb = tabId === 'tabEmbeddingSpace';
             const isCls = tabId === 'tabClsSimilarity';
+            const isPp = tabId === 'tabPatchPrototype';
             tabPatchSimilarity.classList.toggle('hidden', !isSim);
             tabEmbeddingSpace.classList.toggle('hidden', !isEmb);
             tabClsSimilarity.classList.toggle('hidden', !isCls);
+            tabPatchPrototype.classList.toggle('hidden', !isPp);
             tabBtn1.classList.toggle('tab-active', isSim);
             tabBtn2.classList.toggle('tab-active', isEmb);
             tabBtn3.classList.toggle('tab-active', isCls);
+            tabBtn4.classList.toggle('tab-active', isPp);
 
             // The 3D renderers need a resize once their container becomes visible.
             if (isEmb && t2.three) requestAnimationFrame(resizeThree);
             if (isCls && t3.three) requestAnimationFrame(resizeThreeCls);
+            if (isPp) requestAnimationFrame(ppDrawCanvas);
         }
 
         // --- DRAG & DROP LOGIC ---
@@ -545,6 +630,7 @@
 
                 initTab2();
                 initTab3();
+                initTab4();
 
             } catch (error) {
                 updateStatus(`Error: ${error.message}`, true);
@@ -2078,6 +2164,514 @@
             const size = t3.three.pointSize * t3.pointSizeScale;
             t3.three.material.size = size;
             t3.three.raycaster.params.Points.threshold = size * 1.3;
+        }
+
+        // ============================================================
+        // TAB 4 — PATCH PROTOTYPE (cross-image patch classifier)
+        // ============================================================
+
+        const tabPatchPrototype = document.getElementById('tabPatchPrototype');
+        const tabBtn4 = document.getElementById('tabBtn4');
+        const ppCanvas = document.getElementById('ppCanvas');
+        const ppCanvasContainer = document.getElementById('ppCanvasContainer');
+        const ppCoords = document.getElementById('ppCoords');
+        const ppActiveName = document.getElementById('ppActiveName');
+        const ppFileInput = document.getElementById('ppFileInput');
+        const ppDropzone = document.getElementById('ppDropzone');
+        const ppStatus = document.getElementById('ppStatus');
+        const ppProgress = document.getElementById('ppProgress');
+        const ppProgressBar = document.getElementById('ppProgressBar');
+        const ppImageStrip = document.getElementById('ppImageStrip');
+        const ppProtoName = document.getElementById('ppProtoName');
+        const ppProtoColor = document.getElementById('ppProtoColor');
+        const ppSelInfo = document.getElementById('ppSelInfo');
+        const ppProtoList = document.getElementById('ppProtoList');
+        const ppOverlayBtn = document.getElementById('ppOverlayBtn');
+        const ppThresholdSlider = document.getElementById('ppThresholdSlider');
+        const ppThresholdVal = document.getElementById('ppThresholdVal');
+        const ppPreviewCanvas = document.getElementById('ppPreviewCanvas');
+        const ppPreviewLabel = document.getElementById('ppPreviewLabel');
+
+        const ppCtx = ppCanvas.getContext('2d');
+        const ppOffscreen = document.createElement('canvas');
+        const ppOffCtx = ppOffscreen.getContext('2d');
+        const ppPreviewCtx = ppPreviewCanvas.getContext('2d');
+
+        const t4 = {
+            images: [],             // [{name,url,imgObj,embeddings,wFeat,hFeat,dim,origWidth,origHeight,selection:Set}]
+            activeImageIndex: 0,
+            prototypes: [],         // [{id,name,color:[r,g,b],contribSum:Float64Array,contribCount,patchCount,dim,vec:Float32,visible}]
+            activePrototypeId: null,
+            nextProtoId: 1,
+            threshold: 0.5,
+            overlayOn: true,
+            hoverPatch: null,
+            painting: false,
+            paintMode: 'add',       // 'add' | 'erase' while dragging
+            palette: [[239,68,68],[59,130,246],[16,185,129],[245,158,11],[139,92,246],[236,72,153],[20,184,166],[132,204,22]]
+        };
+        let ppListeners = false;
+
+        function ppActiveImage() { return t4.images[t4.activeImageIndex] || null; }
+        function ppPatchEmb(im, index) { return im.embeddings.subarray(index * im.dim, (index + 1) * im.dim); }
+
+        function hexToRgb(hex) {
+            const h = hex.replace('#', '');
+            return [parseInt(h.substr(0, 2), 16), parseInt(h.substr(2, 2), 16), parseInt(h.substr(4, 2), 16)];
+        }
+        function rgbToHex(c) {
+            return '#' + c.map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+        }
+        function normalizeSum(sum) {
+            let n = 0;
+            for (let k = 0; k < sum.length; k++) n += sum[k] * sum[k];
+            n = Math.sqrt(n);
+            const out = new Float32Array(sum.length);
+            if (n > 1e-12) for (let k = 0; k < sum.length; k++) out[k] = sum[k] / n;
+            return out;
+        }
+
+        function initTab4() {
+            if (!currentData.embeddings) return;
+            for (let i = 1; i < t4.images.length; i++) {
+                if (t4.images[i].url) URL.revokeObjectURL(t4.images[i].url);
+            }
+            t4.images = [{
+                name: 'Base', url: currentData.imageObj.src, imgObj: currentData.imageObj,
+                embeddings: currentData.embeddings, wFeat: currentData.wFeat, hFeat: currentData.hFeat,
+                dim: currentData.dim, origWidth: currentData.origWidth, origHeight: currentData.origHeight,
+                selection: new Set()
+            }];
+            t4.activeImageIndex = 0;
+            t4.prototypes = [];
+            t4.activePrototypeId = null;
+            t4.nextProtoId = 1;
+            t4.hoverPatch = null;
+            ppProtoColor.value = rgbToHex(t4.palette[0]);
+            ppStatus.textContent = '0 comparison image(s).';
+            ppSetActiveImage(0);
+            ppRenderPrototypeList();
+            ppUpdateSelInfo();
+            ppClearPreview();
+            if (!ppListeners) { attachPpListeners(); ppListeners = true; }
+        }
+
+        function ppSetActiveImage(i) {
+            if (i < 0 || i >= t4.images.length) return;
+            t4.activeImageIndex = i;
+            t4.hoverPatch = null;
+            const im = t4.images[i];
+            ppActiveName.textContent = `— ${im.name}`;
+            ppCanvas.width = im.origWidth;
+            ppCanvas.height = im.origHeight;
+            ppCanvasContainer.style.aspectRatio = `${im.imgObj.width} / ${im.imgObj.height}`;
+            ppOffscreen.width = im.wFeat;
+            ppOffscreen.height = im.hFeat;
+            ppCoords.textContent = '';
+            ppClearPreview();
+            ppDrawCanvas();
+            ppRenderImageStrip();
+            ppUpdateSelInfo();
+        }
+
+        // --- Upload flow ---
+        async function ppUploadImages(files) {
+            if (!currentData.embeddings) { ppStatus.textContent = 'Load a base image first.'; return; }
+            const list = Array.from(files || []);
+            ppFileInput.value = '';
+            if (list.length === 0) return;
+            const total = list.length;
+            ppProgress.classList.remove('hidden');
+            ppProgressBar.style.width = '0%';
+            let done = 0;
+            for (const file of list) {
+                ppStatus.textContent = `Processing ${done + 1} / ${total}: ${file.name}`;
+                try { await ppProcessFile(file); ppRenderImageStrip(); }
+                catch (e) { ppStatus.textContent = 'Error: ' + e.message; }
+                done++;
+                ppProgressBar.style.width = `${(done / total) * 100}%`;
+            }
+            ppStatus.textContent = `${t4.images.length - 1} comparison image(s).`;
+            setTimeout(() => { ppProgress.classList.add('hidden'); ppProgressBar.style.width = '0%'; }, 500);
+        }
+
+        async function ppProcessFile(file) {
+            const url = URL.createObjectURL(file);
+            const imgObj = new Image();
+            await new Promise((res, rej) => { imgObj.onload = res; imgObj.onerror = rej; imgObj.src = url; });
+            const fd = new FormData();
+            fd.append('file', file);
+            const resp = await fetch('/api/process-image', { method: 'POST', body: fd });
+            if (!resp.ok) throw new Error('Server processing failed');
+            const data = await resp.json();
+            const embeddings = decodeFloat32Array(data.patch_embeddings_b64);
+            t4.images.push({
+                name: file.name, url, imgObj, embeddings,
+                wFeat: data.grid_shape.w_feat, hFeat: data.grid_shape.h_feat,
+                dim: data.embedding_dim, origWidth: data.original_size.width, origHeight: data.original_size.height,
+                selection: new Set()
+            });
+        }
+
+        function ppRemoveImage(i) {
+            if (i <= 0 || i >= t4.images.length) return;
+            if (t4.images[i].url) URL.revokeObjectURL(t4.images[i].url);
+            t4.images.splice(i, 1);
+            if (t4.activeImageIndex >= t4.images.length) t4.activeImageIndex = t4.images.length - 1;
+            else if (t4.activeImageIndex === i) t4.activeImageIndex = 0;
+            else if (t4.activeImageIndex > i) t4.activeImageIndex--;
+            ppSetActiveImage(t4.activeImageIndex);
+            ppStatus.textContent = `${t4.images.length - 1} comparison image(s).`;
+        }
+
+        function ppRenderImageStrip() {
+            ppImageStrip.innerHTML = '';
+            t4.images.forEach((im, i) => {
+                const active = i === t4.activeImageIndex;
+                const row = document.createElement('div');
+                row.className = `flex items-center gap-2 p-2 rounded border cursor-pointer transition ${active ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`;
+                row.onclick = () => ppSetActiveImage(i);
+                const thumb = document.createElement('img');
+                thumb.src = im.url;
+                thumb.className = 'w-10 h-10 object-cover rounded border border-gray-200 flex-none';
+                const info = document.createElement('div');
+                info.className = 'flex-1 min-w-0';
+                const nm = document.createElement('div');
+                nm.className = 'text-xs font-medium truncate';
+                nm.textContent = i === 0 ? 'Base' : im.name;
+                const sel = document.createElement('div');
+                sel.className = 'text-xs text-gray-500';
+                sel.textContent = im.selection.size ? `${im.selection.size} selected` : '';
+                info.appendChild(nm); info.appendChild(sel);
+                row.appendChild(thumb); row.appendChild(info);
+                if (i !== 0) {
+                    const rm = document.createElement('button');
+                    rm.textContent = '×';
+                    rm.className = 'text-gray-400 hover:text-red-600 px-1 flex-none text-lg leading-none';
+                    rm.onclick = (e) => { e.stopPropagation(); ppRemoveImage(i); };
+                    row.appendChild(rm);
+                }
+                ppImageStrip.appendChild(row);
+            });
+        }
+
+        // --- Interaction ---
+        function attachPpListeners() {
+            ppCanvas.addEventListener('mousedown', ppOnDown);
+            ppCanvas.addEventListener('mousemove', ppOnMove);
+            window.addEventListener('mouseup', ppOnUp);
+            ppCanvas.addEventListener('mouseleave', () => {
+                t4.hoverPatch = null; ppCoords.textContent = ''; ppClearPreview(); ppDrawCanvas();
+            });
+            ppDropzone.addEventListener('click', () => ppFileInput.click());
+            ppDropzone.addEventListener('dragover', (e) => { e.preventDefault(); ppDropzone.classList.add('bg-blue-50', 'border-blue-400'); });
+            ppDropzone.addEventListener('dragleave', (e) => { e.preventDefault(); ppDropzone.classList.remove('bg-blue-50', 'border-blue-400'); });
+            ppDropzone.addEventListener('drop', (e) => {
+                e.preventDefault(); ppDropzone.classList.remove('bg-blue-50', 'border-blue-400');
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) ppUploadImages(e.dataTransfer.files);
+            });
+            ppThresholdSlider.addEventListener('input', () => ppSetThreshold(parseFloat(ppThresholdSlider.value)));
+        }
+
+        function ppGridCoords(e) {
+            const im = ppActiveImage();
+            const rect = ppCanvas.getBoundingClientRect();
+            const scaleX = ppCanvas.width / rect.width;
+            const scaleY = ppCanvas.height / rect.height;
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
+            const pw = ppCanvas.width / im.wFeat;
+            const ph = ppCanvas.height / im.hFeat;
+            let fx = Math.floor(x / pw), fy = Math.floor(y / ph);
+            fx = Math.max(0, Math.min(fx, im.wFeat - 1));
+            fy = Math.max(0, Math.min(fy, im.hFeat - 1));
+            return { x: fx, y: fy, index: fy * im.wFeat + fx };
+        }
+
+        function ppOnMove(e) {
+            const im = ppActiveImage();
+            if (!im) return;
+            const c = ppGridCoords(e);
+            const moved = !t4.hoverPatch || t4.hoverPatch.index !== c.index;
+            if (moved) {
+                t4.hoverPatch = c;
+                ppCoords.textContent = `Patch (${c.x}, ${c.y})`;
+                ppUpdatePreview(c);
+            }
+            // While the button is held, paint (or erase) patches along the drag.
+            if (t4.painting && moved) {
+                ppApplyPaint(im, c.index);
+                ppUpdateSelInfo();
+                ppRenderImageStrip();
+            }
+            if (moved) ppDrawCanvas();
+        }
+
+        function ppOnDown(e) {
+            const im = ppActiveImage();
+            if (!im || e.button !== 0) return;
+            e.preventDefault();
+            const c = ppGridCoords(e);
+            // Direction is decided by the first patch: paint if it was empty, erase if it was set.
+            t4.paintMode = im.selection.has(c.index) ? 'erase' : 'add';
+            t4.painting = true;
+            t4.hoverPatch = c;
+            ppApplyPaint(im, c.index);
+            ppUpdateSelInfo();
+            ppRenderImageStrip();
+            ppDrawCanvas();
+        }
+
+        function ppOnUp() { t4.painting = false; }
+
+        function ppApplyPaint(im, index) {
+            if (t4.paintMode === 'erase') im.selection.delete(index);
+            else im.selection.add(index);
+        }
+
+        function ppBestProto(im, index) {
+            let best = null;
+            const e = ppPatchEmb(im, index);
+            for (const p of t4.prototypes) {
+                if (!p.visible || !p.vec || p.dim !== im.dim) continue;
+                let d = 0;
+                for (let k = 0; k < im.dim; k++) d += e[k] * p.vec[k];
+                if (!best || d > best.sim) best = { p, sim: d };
+            }
+            return best;
+        }
+
+        function ppUpdatePreview(c) {
+            const im = ppActiveImage();
+            const pw = im.origWidth / im.wFeat, ph = im.origHeight / im.hFeat;
+            ppPreviewCtx.clearRect(0, 0, ppPreviewCanvas.width, ppPreviewCanvas.height);
+            ppPreviewCtx.imageSmoothingEnabled = false;
+            ppPreviewCtx.drawImage(im.imgObj, c.x * pw, c.y * ph, pw, ph, 0, 0, ppPreviewCanvas.width, ppPreviewCanvas.height);
+            const best = ppBestProto(im, c.index);
+            ppPreviewLabel.textContent = best ? `${best.p.name}: ${(best.sim * 100).toFixed(0)}%` : `patch (${c.x}, ${c.y})`;
+        }
+
+        function ppClearPreview() {
+            ppPreviewCtx.clearRect(0, 0, ppPreviewCanvas.width, ppPreviewCanvas.height);
+            ppPreviewLabel.textContent = '';
+        }
+
+        // --- Prototype management ---
+        // A prototype averages *per-image* mean vectors (each contribution weighted equally),
+        // so a densely-selected image doesn't dominate one with fewer patches.
+        function ppSelectionMean(im) {
+            const dim = im.dim;
+            const mean = new Float64Array(dim);
+            const n = im.selection.size;
+            if (n) {
+                im.selection.forEach(idx => { const e = ppPatchEmb(im, idx); for (let k = 0; k < dim; k++) mean[k] += e[k]; });
+                for (let k = 0; k < dim; k++) mean[k] /= n;
+            }
+            return { mean, n };
+        }
+
+        function ppCreatePrototype() {
+            const im = ppActiveImage();
+            if (!im || !im.selection.size) { ppStatus.textContent = 'Select patches first.'; return; }
+            const name = (ppProtoName.value || '').trim() || `Prototype ${t4.nextProtoId}`;
+            const color = hexToRgb(ppProtoColor.value);
+            const dim = im.dim;
+            const { mean, n } = ppSelectionMean(im);
+            const contribSum = new Float64Array(dim);
+            for (let k = 0; k < dim; k++) contribSum[k] = mean[k];
+            const proto = { id: t4.nextProtoId++, name, color, contribSum, contribCount: 1, patchCount: n, dim, vec: normalizeSum(contribSum), visible: true };
+            t4.prototypes.push(proto);
+            t4.activePrototypeId = proto.id;
+            im.selection.clear();
+            ppProtoName.value = '';
+            ppProtoColor.value = rgbToHex(t4.palette[t4.prototypes.length % t4.palette.length]);
+            ppRenderPrototypeList();
+            ppUpdateSelInfo();
+            ppRenderImageStrip();
+            ppDrawCanvas();
+        }
+
+        function ppAddToActive() {
+            const im = ppActiveImage();
+            if (!im || !im.selection.size) { ppStatus.textContent = 'Select patches first.'; return; }
+            const proto = t4.prototypes.find(p => p.id === t4.activePrototypeId);
+            if (!proto) { ppStatus.textContent = 'No active prototype — create one first.'; return; }
+            if (proto.dim !== im.dim) { ppStatus.textContent = 'Embedding dim mismatch.'; return; }
+            const { mean, n } = ppSelectionMean(im);
+            for (let k = 0; k < proto.dim; k++) proto.contribSum[k] += mean[k];
+            proto.contribCount++;
+            proto.patchCount += n;
+            proto.vec = normalizeSum(proto.contribSum);
+            im.selection.clear();
+            ppRenderPrototypeList();
+            ppUpdateSelInfo();
+            ppRenderImageStrip();
+            ppDrawCanvas();
+        }
+
+        function ppClearSelection() {
+            const im = ppActiveImage();
+            if (!im) return;
+            im.selection.clear();
+            ppUpdateSelInfo();
+            ppRenderImageStrip();
+            ppDrawCanvas();
+        }
+
+        function ppSetActivePrototype(id) { t4.activePrototypeId = id; ppRenderPrototypeList(); ppDrawCanvas(); }
+        function ppTogglePrototypeVisible(id) {
+            const p = t4.prototypes.find(x => x.id === id);
+            if (p) { p.visible = !p.visible; ppDrawCanvas(); ppRenderPrototypeList(); }
+        }
+        function ppDeletePrototype(id) {
+            t4.prototypes = t4.prototypes.filter(p => p.id !== id);
+            if (t4.activePrototypeId === id) t4.activePrototypeId = t4.prototypes.length ? t4.prototypes[0].id : null;
+            ppRenderPrototypeList();
+            ppDrawCanvas();
+        }
+
+        function ppUpdateSelInfo() {
+            const im = ppActiveImage();
+            ppSelInfo.textContent = `${im ? im.selection.size : 0} patch(es) selected.`;
+        }
+
+        function ppRenderPrototypeList() {
+            ppProtoList.innerHTML = '';
+            if (!t4.prototypes.length) {
+                const e = document.createElement('p');
+                e.className = 'text-xs text-gray-400';
+                e.textContent = 'No prototypes yet — select patches and create one.';
+                ppProtoList.appendChild(e);
+                return;
+            }
+            t4.prototypes.forEach(p => {
+                const active = p.id === t4.activePrototypeId;
+                const row = document.createElement('div');
+                row.className = `flex items-center gap-2 p-2 rounded border ${active ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'}`;
+
+                const radio = document.createElement('input');
+                radio.type = 'radio'; radio.checked = active; radio.title = 'Set active';
+                radio.className = 'accent-blue-600 flex-none cursor-pointer';
+                radio.onclick = () => ppSetActivePrototype(p.id);
+
+                const sw = document.createElement('input');
+                sw.type = 'color'; sw.value = rgbToHex(p.color);
+                sw.className = 'w-6 h-6 p-0 border border-gray-300 rounded cursor-pointer flex-none';
+                sw.title = 'Prototype color';
+                sw.oninput = () => { p.color = hexToRgb(sw.value); ppDrawCanvas(); };
+
+                const info = document.createElement('div');
+                info.className = 'flex-1 min-w-0';
+                const nm = document.createElement('div');
+                nm.className = 'text-xs font-medium truncate';
+                nm.textContent = p.name;
+                const ct = document.createElement('div');
+                ct.className = 'text-xs text-gray-500';
+                ct.textContent = `${p.patchCount} patch(es) · ${p.contribCount} img${p.visible ? '' : ' · hidden'}`;
+                info.appendChild(nm); info.appendChild(ct);
+
+                const vis = document.createElement('input');
+                vis.type = 'checkbox'; vis.checked = p.visible; vis.title = 'Toggle visibility';
+                vis.className = 'accent-blue-600 flex-none cursor-pointer';
+                vis.onclick = () => ppTogglePrototypeVisible(p.id);
+
+                const rm = document.createElement('button');
+                rm.textContent = '×';
+                rm.className = 'text-gray-400 hover:text-red-600 px-1 flex-none text-lg leading-none';
+                rm.onclick = () => ppDeletePrototype(p.id);
+
+                row.appendChild(radio); row.appendChild(sw); row.appendChild(info); row.appendChild(vis); row.appendChild(rm);
+                ppProtoList.appendChild(row);
+            });
+        }
+
+        // --- Overlay + rendering ---
+        function ppSetThreshold(v) { t4.threshold = v; ppThresholdVal.textContent = v.toFixed(2); ppDrawCanvas(); }
+        function ppToggleOverlay() {
+            t4.overlayOn = !t4.overlayOn;
+            ppOverlayBtn.textContent = t4.overlayOn ? 'On' : 'Off';
+            ppOverlayBtn.classList.toggle('bg-blue-600', t4.overlayOn);
+            ppOverlayBtn.classList.toggle('text-white', t4.overlayOn);
+            ppOverlayBtn.classList.toggle('bg-gray-400', !t4.overlayOn);
+            ppDrawCanvas();
+        }
+
+        function ppComputeOverlay(im) {
+            const n = im.wFeat * im.hFeat;
+            const result = new Array(n).fill(null);
+            const visProtos = t4.prototypes.filter(p => p.visible && p.vec && p.dim === im.dim);
+            if (!visProtos.length) return result;
+            const thr = t4.threshold;
+            for (let i = 0; i < n; i++) {
+                const e = ppPatchEmb(im, i);
+                let best = null;
+                for (const p of visProtos) {
+                    let d = 0;
+                    for (let k = 0; k < im.dim; k++) d += e[k] * p.vec[k];
+                    if (!best || d > best.sim) best = { p, sim: d };
+                }
+                if (best && best.sim >= thr) result[i] = best;
+            }
+            return result;
+        }
+
+        function ppActiveProtoColorCss() {
+            const p = t4.prototypes.find(x => x.id === t4.activePrototypeId);
+            return p ? `rgb(${p.color[0]},${p.color[1]},${p.color[2]})` : 'rgba(255,255,255,0.9)';
+        }
+
+        function ppDrawCanvas() {
+            const im = ppActiveImage();
+            if (!im || !im.imgObj) return;
+            const W = ppCanvas.width, H = ppCanvas.height;
+            const pw = W / im.wFeat, ph = H / im.hFeat;
+            ppCtx.clearRect(0, 0, W, H);
+
+            const overlay = t4.overlayOn ? ppComputeOverlay(im) : null;
+            const hasOverlay = overlay && overlay.some(x => x);
+
+            ppCtx.globalAlpha = hasOverlay ? 0.45 : 1.0;
+            ppCtx.drawImage(im.imgObj, 0, 0, W, H);
+            ppCtx.globalAlpha = 1.0;
+
+            if (overlay) {
+                const id = ppOffCtx.createImageData(im.wFeat, im.hFeat);
+                const d = id.data;
+                const thr = t4.threshold;
+                for (let i = 0; i < overlay.length; i++) {
+                    const b = overlay[i];
+                    const px = i * 4;
+                    if (b) {
+                        const a = Math.max(0, Math.min(1, (b.sim - thr) / (1 - thr + 1e-6)));
+                        d[px] = b.p.color[0]; d[px + 1] = b.p.color[1]; d[px + 2] = b.p.color[2];
+                        d[px + 3] = Math.round((0.35 + 0.6 * a) * 255);
+                    } else { d[px + 3] = 0; }
+                }
+                ppOffCtx.putImageData(id, 0, 0);
+                ppCtx.imageSmoothingEnabled = false;
+                ppCtx.drawImage(ppOffscreen, 0, 0, W, H);
+            }
+
+            ppCtx.strokeStyle = 'rgba(255,255,255,0.35)';
+            ppCtx.lineWidth = 1;
+            ppCtx.beginPath();
+            for (let i = 1; i < im.wFeat; i++) { ppCtx.moveTo(i * pw, 0); ppCtx.lineTo(i * pw, H); }
+            for (let i = 1; i < im.hFeat; i++) { ppCtx.moveTo(0, i * ph); ppCtx.lineTo(W, i * ph); }
+            ppCtx.stroke();
+
+            const lw = Math.max(2, W * 0.004);
+            ppCtx.strokeStyle = ppActiveProtoColorCss();
+            ppCtx.lineWidth = lw;
+            im.selection.forEach(idx => {
+                const x = idx % im.wFeat, y = Math.floor(idx / im.wFeat);
+                ppCtx.strokeRect(x * pw, y * ph, pw, ph);
+            });
+
+            if (t4.hoverPatch) {
+                ppCtx.strokeStyle = 'cyan';
+                ppCtx.lineWidth = lw;
+                ppCtx.strokeRect(t4.hoverPatch.x * pw, t4.hoverPatch.y * ph, pw, ph);
+            }
         }
     </script>
 </body>

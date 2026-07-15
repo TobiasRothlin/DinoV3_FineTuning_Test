@@ -6,6 +6,9 @@
     <title>DINOv3 Interactive Web UI</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- three.js for the 3D embedding space -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <style>
         .tab-active {
             border-bottom: 2px solid #3b82f6;
@@ -26,7 +29,7 @@
         </div>
     </header>
 
-    <main class="flex-grow p-6 max-w-7xl mx-auto w-full flex flex-col gap-6">
+    <main class="flex-grow p-6 w-full flex flex-col gap-6">
 
         <!-- Drag & Drop Zone -->
         <div id="dropzone" class="w-full border-2 border-dashed border-gray-300 rounded-lg p-10 bg-white text-center hover:bg-gray-50 transition cursor-pointer flex flex-col items-center justify-center min-h-[150px]">
@@ -41,10 +44,13 @@
         <!-- Tabs -->
         <div class="border-b border-gray-200 mt-4">
             <nav class="-mb-px flex space-x-8" aria-label="Tabs">
-                <button class="tab-active whitespace-nowrap py-4 px-1 font-medium text-sm transition">
+                <button id="tabBtn1" onclick="showTab('tabPatchSimilarity')" class="tab-active whitespace-nowrap py-4 px-1 font-medium text-sm transition">
                     Patch Similarity
                 </button>
-                <button class="whitespace-nowrap py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium text-sm transition cursor-not-allowed opacity-50" title="Coming Soon">
+                <button id="tabBtn2" onclick="showTab('tabEmbeddingSpace')" class="whitespace-nowrap py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium text-sm transition">
+                    Embedding Space (PCA)
+                </button>
+                <button class="whitespace-nowrap py-4 px-1 border-b-2 border-transparent text-gray-500 font-medium text-sm transition cursor-not-allowed opacity-50" title="Coming Soon">
                     Attention Maps (Soon)
                 </button>
             </nav>
@@ -64,7 +70,7 @@
                 <!-- Left: Source Image + Grid Overlay -->
                 <div class="flex flex-col items-center w-full">
                     <p class="mb-2 font-medium text-gray-700">Source Image & Grid</p>
-                    <div class="relative w-full max-w-full overflow-hidden border border-gray-300 rounded bg-gray-100 flex justify-center" id="imageContainer">
+                    <div class="relative max-w-full overflow-hidden border border-gray-300 rounded bg-gray-100 mx-auto" id="imageContainer" style="height: 80vh; min-height: 460px;">
                         <!-- Hidden underlying image to maintain aspect ratio/rendering -->
                         <img id="sourceImage" class="absolute top-0 left-0 w-full h-full object-contain pointer-events-none opacity-0" />
                         <!-- Canvas for drawing the image, grid, and hover box -->
@@ -81,7 +87,7 @@
                             Smoothing: On
                         </button>
                     </div>
-                    <div class="relative w-full max-w-full overflow-hidden border border-gray-300 rounded bg-gray-100 flex justify-center" id="rightImageContainer">
+                    <div class="relative max-w-full overflow-hidden border border-gray-300 rounded bg-gray-100 mx-auto" id="rightImageContainer" style="height: 80vh; min-height: 460px;">
                         <canvas id="rightCanvas" class="absolute top-0 left-0 w-full h-full"></canvas>
                     </div>
                     <div class="w-full flex justify-between px-4 mt-2 text-xs text-gray-500">
@@ -90,6 +96,102 @@
                         <span>High (1.0)</span>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Tab Content: Embedding Space (PCA) -->
+        <div id="tabEmbeddingSpace" class="flex flex-col gap-4 hidden">
+
+            <div class="flex justify-between items-end flex-wrap gap-4">
+                <h2 class="text-xl font-semibold">3D Embedding Space (PCA)</h2>
+            </div>
+
+            <!-- All three sections on one row: image | 3D (prominent, flexible width) | PCA map.
+                 Images are fixed to the 3D height; their (narrow) width follows the aspect ratio,
+                 leaving the extra horizontal space to the 3D view. -->
+            <div class="flex flex-col xl:flex-row gap-6 items-start">
+                <!-- Left: Source Image + Grid Overlay -->
+                <div class="bg-white p-4 rounded-lg shadow flex flex-col items-center xl:flex-none">
+                    <p class="mb-2 font-medium text-gray-700">Source Image &amp; Grid</p>
+                    <div class="relative overflow-hidden border border-gray-300 rounded bg-gray-100 mx-auto" id="imageContainer2" style="height: 72vh; min-height: 460px;">
+                        <canvas id="leftCanvas2" class="absolute top-0 left-0 w-full h-full cursor-crosshair"></canvas>
+                    </div>
+                    <p id="leftCoords2" class="text-xs text-gray-500 mt-2 h-4"></p>
+                </div>
+
+                <!-- Middle: 3D Vector Space (prominent, fills remaining width) -->
+                <div class="bg-white p-4 rounded-lg shadow flex flex-col items-center xl:flex-1 min-w-0 w-full">
+                    <div class="w-full flex justify-between items-center mb-2">
+                        <p class="font-medium text-gray-700">3D Vector Space</p>
+                        <p class="text-xs text-gray-500">Drag to rotate · scroll to zoom · hover/click a point</p>
+                    </div>
+
+                    <!-- 3D view controls -->
+                    <div class="w-full flex items-center flex-wrap gap-x-5 gap-y-2 mb-3 pb-3 border-b border-gray-200">
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm text-gray-600">Neighbor mode</span>
+                            <div class="inline-flex rounded overflow-hidden border border-gray-300">
+                                <button id="modeTopK" onclick="setNeighborMode('topk')" class="px-3 py-1 text-xs font-medium bg-blue-600 text-white transition">Top-K</button>
+                                <button id="modeThreshold" onclick="setNeighborMode('threshold')" class="px-3 py-1 text-xs font-medium bg-white text-gray-600 hover:bg-gray-100 transition">Threshold</button>
+                            </div>
+                        </div>
+
+                        <div id="topkControl" class="flex items-center gap-2">
+                            <label for="topkSlider" class="text-sm text-gray-600">K</label>
+                            <input id="topkSlider" type="range" min="1" max="50" step="1" value="10" class="w-28 accent-blue-600">
+                            <span id="topkVal" class="text-xs text-gray-500 w-6">10</span>
+                        </div>
+
+                        <div id="thresholdControl" class="flex items-center gap-2 hidden">
+                            <label for="thresholdSlider" class="text-sm text-gray-600">Min similarity</label>
+                            <input id="thresholdSlider" type="range" min="0" max="1" step="0.01" value="0.80" class="w-28 accent-blue-600">
+                            <span id="thresholdVal" class="text-xs text-gray-500 w-8">0.80</span>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <label for="fadeSlider" class="text-sm text-gray-600">Non-match opacity</label>
+                            <input id="fadeSlider" type="range" min="0" max="1" step="0.01" value="0.15" class="w-28 accent-blue-600">
+                            <span id="fadeVal" class="text-xs text-gray-500 w-8">0.15</span>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <label for="pointSizeSlider" class="text-sm text-gray-600">Point size</label>
+                            <input id="pointSizeSlider" type="range" min="0.1" max="0.5" step="0.01" value="0.3" class="w-28 accent-blue-600">
+                            <span id="pointSizeVal" class="text-xs text-gray-500 w-8">0.3×</span>
+                        </div>
+
+                        <button id="grayNonMatchBtn" onclick="toggleGrayNonMatch()" class="px-3 py-1 text-xs font-medium rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 transition">Gray non-match: Off</button>
+
+                        <button id="resetViewBtn" onclick="resetView()" class="px-3 py-1 text-xs font-medium rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 transition">Reset view</button>
+                    </div>
+
+                    <div id="threeContainer" class="relative w-full overflow-hidden border border-gray-300 rounded bg-gray-900" style="height: 72vh; min-height: 460px;"></div>
+                </div>
+
+                <!-- Right: PCA Color Map -->
+                <div class="bg-white p-4 rounded-lg shadow flex flex-col items-center xl:flex-none">
+                    <p class="mb-2 font-medium text-gray-700">PCA Color Map</p>
+                    <div class="mb-2 flex items-center gap-2">
+                        <label for="pcaOpacity" class="text-sm text-gray-600">PCA Opacity</label>
+                        <input id="pcaOpacity" type="range" min="0" max="1" step="0.01" value="0.6" class="w-32 accent-blue-600">
+                        <span id="pcaOpacityVal" class="text-xs text-gray-500 w-8">0.60</span>
+                    </div>
+                    <div class="relative overflow-hidden border border-gray-300 rounded bg-gray-100 mx-auto" id="pcaContainer" style="height: 72vh; min-height: 460px;">
+                        <canvas id="pcaCanvas" class="absolute top-0 left-0 w-full h-full cursor-crosshair"></canvas>
+                    </div>
+                    <div class="mt-2 flex items-center gap-2 h-16">
+                        <span class="text-xs text-gray-500">Hovered patch:</span>
+                        <canvas id="cropCanvas" width="64" height="64" class="border border-gray-300 rounded bg-gray-100" style="image-rendering: pixelated;"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Nearest neighbors panel (shown on click) -->
+            <div id="neighborsPanel" class="bg-white p-6 rounded-lg shadow hidden">
+                <h3 class="text-lg font-semibold mb-3"><span id="neighborsTitle">Nearest Patches</span>
+                    <span id="neighborsQuery" class="text-sm font-normal text-gray-500"></span>
+                </h3>
+                <div id="neighborsList" class="flex flex-wrap gap-3"></div>
             </div>
         </div>
 
@@ -104,7 +206,9 @@
             hFeat: 0,
             origWidth: 0,
             origHeight: 0,
-            imageObj: null
+            imageObj: null,
+            pcaCoords: null,
+            pcaRgb: null
         };
 
         let interactionState = {
@@ -137,6 +241,76 @@
         const hiResCanvas = document.createElement('canvas');
         const hiResCtx = hiResCanvas.getContext('2d');
 
+        // --- TAB 2 (Embedding Space) DOM + STATE ---
+        let activeTab = 'tabPatchSimilarity';
+        const tabBtn1 = document.getElementById('tabBtn1');
+        const tabBtn2 = document.getElementById('tabBtn2');
+        const tabPatchSimilarity = document.getElementById('tabPatchSimilarity');
+        const tabEmbeddingSpace = document.getElementById('tabEmbeddingSpace');
+
+        const imageContainer2 = document.getElementById('imageContainer2');
+        const pcaContainer = document.getElementById('pcaContainer');
+        const leftCanvas2 = document.getElementById('leftCanvas2');
+        const leftCtx2 = leftCanvas2.getContext('2d');
+        const pcaCanvas = document.getElementById('pcaCanvas');
+        const pcaCtx = pcaCanvas.getContext('2d');
+        const leftCoords2 = document.getElementById('leftCoords2');
+        const threeContainer = document.getElementById('threeContainer');
+        const cropCanvas = document.getElementById('cropCanvas');
+        const cropCtx = cropCanvas.getContext('2d');
+        const pcaOpacity = document.getElementById('pcaOpacity');
+        const pcaOpacityVal = document.getElementById('pcaOpacityVal');
+        const neighborsPanel = document.getElementById('neighborsPanel');
+        const neighborsList = document.getElementById('neighborsList');
+        const neighborsQuery = document.getElementById('neighborsQuery');
+        const neighborsTitle = document.getElementById('neighborsTitle');
+        const modeTopKBtn = document.getElementById('modeTopK');
+        const modeThresholdBtn = document.getElementById('modeThreshold');
+        const topkControl = document.getElementById('topkControl');
+        const thresholdControl = document.getElementById('thresholdControl');
+        const topkSlider = document.getElementById('topkSlider');
+        const topkVal = document.getElementById('topkVal');
+        const thresholdSlider = document.getElementById('thresholdSlider');
+        const thresholdVal = document.getElementById('thresholdVal');
+        const fadeSlider = document.getElementById('fadeSlider');
+        const fadeVal = document.getElementById('fadeVal');
+        const pointSizeSlider = document.getElementById('pointSizeSlider');
+        const pointSizeVal = document.getElementById('pointSizeVal');
+        const grayNonMatchBtn = document.getElementById('grayNonMatchBtn');
+
+        const pcaOffscreen = document.createElement('canvas');
+        const pcaOffscreenCtx = pcaOffscreen.getContext('2d');
+
+        const NEIGHBOR_THUMB_CAP = 60;   // max thumbnails rendered in the panel
+
+        // Shared linked-hover / selection state for Tab 2
+        const t2 = {
+            hoverIndex: null,
+            selectedIndex: null,
+            neighbors: [],          // array of {index, sim}
+            three: null,            // three.js scene bundle
+            neighborMode: 'topk',   // 'topk' | 'threshold'
+            k: 10,
+            threshold: 0.80,
+            fadeOpacity: 0.15,      // opacity of non-similar points when a patch is selected
+            pointSizeScale: 0.3,    // multiplier on the base point size
+            grayNonMatch: false     // desaturate non-matching points to gray
+        };
+
+        function showTab(tabId) {
+            activeTab = tabId;
+            const showSim = tabId === 'tabPatchSimilarity';
+            tabPatchSimilarity.classList.toggle('hidden', !showSim);
+            tabEmbeddingSpace.classList.toggle('hidden', showSim);
+            tabBtn1.classList.toggle('tab-active', showSim);
+            tabBtn2.classList.toggle('tab-active', !showSim);
+
+            // The 3D renderer needs a resize once its container becomes visible.
+            if (!showSim && t2.three) {
+                requestAnimationFrame(resizeThree);
+            }
+        }
+
         // --- DRAG & DROP LOGIC ---
         dropzone.addEventListener('click', () => fileInput.click());
         dropzone.addEventListener('dragover', (e) => {
@@ -166,12 +340,14 @@
             currentData.imageObj.src = url;
 
             currentData.imageObj.onload = () => {
-                tabContent.classList.remove('hidden');
+                showTab(activeTab);
 
-                // Dynamically enforce original aspect ratio on both canvases
+                // Dynamically enforce original aspect ratio on all canvases
                 const aspectRatio = `${currentData.imageObj.width} / ${currentData.imageObj.height}`;
                 imageContainer.style.aspectRatio = aspectRatio;
                 rightImageContainer.style.aspectRatio = aspectRatio;
+                imageContainer2.style.aspectRatio = aspectRatio;
+                pcaContainer.style.aspectRatio = aspectRatio;
 
                 processImageBackend(file);
             };
@@ -202,6 +378,8 @@
                 currentData.hFeat = data.grid_shape.h_feat;
                 currentData.origWidth = data.original_size.width;
                 currentData.origHeight = data.original_size.height;
+                currentData.pcaCoords = data.pca_coords_b64 ? decodeFloat32Array(data.pca_coords_b64) : null;
+                currentData.pcaRgb = computePcaRgb(currentData.pcaCoords);
 
                 setupCanvases();
 
@@ -209,6 +387,8 @@
 
                 drawLeftCanvas();
                 clearRightCanvas();
+
+                initTab2();
 
             } catch (error) {
                 updateStatus(`Error: ${error.message}`, true);
@@ -498,6 +678,681 @@
                 r = Math.max(0, 1 - 4 * (v - 0.875)); g = 0; b = 0;
             }
             return [Math.floor(r * 255), Math.floor(g * 255), Math.floor(b * 255)];
+        }
+
+        // ============================================================
+        // TAB 2 — EMBEDDING SPACE (3D PCA EXPLORER)
+        // ============================================================
+
+        // Per-axis min-max normalize PCA coords to [0,1] for RGB rendering.
+        function computePcaRgb(coords) {
+            if (!coords) return null;
+            const n = coords.length / 3;
+            const min = [Infinity, Infinity, Infinity];
+            const max = [-Infinity, -Infinity, -Infinity];
+            for (let i = 0; i < n; i++) {
+                for (let c = 0; c < 3; c++) {
+                    const v = coords[i * 3 + c];
+                    if (v < min[c]) min[c] = v;
+                    if (v > max[c]) max[c] = v;
+                }
+            }
+            const rgb = new Float32Array(n * 3);
+            for (let i = 0; i < n; i++) {
+                for (let c = 0; c < 3; c++) {
+                    const range = max[c] - min[c] || 1;
+                    rgb[i * 3 + c] = (coords[i * 3 + c] - min[c]) / range;
+                }
+            }
+            return rgb;
+        }
+
+        function patchRect(index) {
+            const w = currentData.wFeat, h = currentData.hFeat;
+            const x = index % w;
+            const y = Math.floor(index / w);
+            const pw = currentData.origWidth / w;
+            const ph = currentData.origHeight / h;
+            return { x, y, sx: x * pw, sy: y * ph, sw: pw, sh: ph };
+        }
+
+        let tab2Listeners = false;
+        let leftBaseCanvas = document.createElement('canvas');
+        let leftBaseCtx = leftBaseCanvas.getContext('2d');
+        let pcaBaseCanvas = document.createElement('canvas');
+        let pcaBaseCtx = pcaBaseCanvas.getContext('2d');
+
+        function initTab2() {
+            if (!currentData.pcaCoords) return;
+
+            // Reset selection state for the new image.
+            t2.hoverIndex = null;
+            t2.selectedIndex = null;
+            t2.neighbors = [];
+            neighborsPanel.classList.add('hidden');
+            neighborsList.innerHTML = '';
+            leftCoords2.textContent = '';
+
+            setupTab2Canvases();
+            renderPcaBase();
+            drawLeft2Base();
+            drawLeft2();
+            drawPcaMap();
+            buildThree();
+
+            if (!tab2Listeners) {
+                attachTab2Listeners();
+                tab2Listeners = true;
+            }
+        }
+
+        function setupTab2Canvases() {
+            const W = currentData.origWidth, H = currentData.origHeight;
+            leftCanvas2.width = W; leftCanvas2.height = H;
+            pcaCanvas.width = W; pcaCanvas.height = H;
+            leftBaseCanvas.width = W; leftBaseCanvas.height = H;
+            pcaBaseCanvas.width = W; pcaBaseCanvas.height = H;
+            pcaOffscreen.width = currentData.wFeat;
+            pcaOffscreen.height = currentData.hFeat;
+        }
+
+        // --- LEFT: image + grid (cached base, then overlays) ---
+        function drawLeft2Base() {
+            const ctx = leftBaseCtx;
+            const W = leftBaseCanvas.width, H = leftBaseCanvas.height;
+            ctx.clearRect(0, 0, W, H);
+            ctx.drawImage(currentData.imageObj, 0, 0, W, H);
+            ctx.fillStyle = 'rgba(200, 200, 200, 0.25)';
+            ctx.fillRect(0, 0, W, H);
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+            ctx.lineWidth = 1;
+            const pw = W / currentData.wFeat;
+            const ph = H / currentData.hFeat;
+            ctx.beginPath();
+            for (let i = 1; i < currentData.wFeat; i++) { ctx.moveTo(i * pw, 0); ctx.lineTo(i * pw, H); }
+            for (let i = 1; i < currentData.hFeat; i++) { ctx.moveTo(0, i * ph); ctx.lineTo(W, i * ph); }
+            ctx.stroke();
+        }
+
+        function drawLeft2() {
+            const W = leftCanvas2.width, H = leftCanvas2.height;
+            leftCtx2.clearRect(0, 0, W, H);
+            leftCtx2.drawImage(leftBaseCanvas, 0, 0);
+            drawPatchOverlays(leftCtx2, W, H);
+        }
+
+        // --- RIGHT: PCA color map (cached base composite, then overlays) ---
+        function renderPcaBase() {
+            const w = currentData.wFeat, h = currentData.hFeat;
+            const rgb = currentData.pcaRgb;
+            const imgData = pcaOffscreenCtx.createImageData(w, h);
+            const d = imgData.data;
+            for (let i = 0; i < w * h; i++) {
+                d[i * 4] = Math.round(rgb[i * 3] * 255);
+                d[i * 4 + 1] = Math.round(rgb[i * 3 + 1] * 255);
+                d[i * 4 + 2] = Math.round(rgb[i * 3 + 2] * 255);
+                d[i * 4 + 3] = 255;
+            }
+            pcaOffscreenCtx.putImageData(imgData, 0, 0);
+
+            const W = pcaBaseCanvas.width, H = pcaBaseCanvas.height;
+            const alpha = parseFloat(pcaOpacity.value);
+            pcaBaseCtx.clearRect(0, 0, W, H);
+            pcaBaseCtx.drawImage(currentData.imageObj, 0, 0, W, H);
+            pcaBaseCtx.globalAlpha = alpha;
+            pcaBaseCtx.imageSmoothingEnabled = true;
+            pcaBaseCtx.drawImage(pcaOffscreen, 0, 0, W, H);
+            pcaBaseCtx.globalAlpha = 1.0;
+        }
+
+        function drawPcaMap() {
+            const W = pcaCanvas.width, H = pcaCanvas.height;
+            pcaCtx.clearRect(0, 0, W, H);
+            pcaCtx.drawImage(pcaBaseCanvas, 0, 0);
+            drawPatchOverlays(pcaCtx, W, H);
+        }
+
+        // Draw selection/hover/neighbor boxes onto a canvas at original resolution.
+        function drawPatchOverlays(ctx, W, H) {
+            const pw = W / currentData.wFeat;
+            const ph = H / currentData.hFeat;
+            const lw = Math.max(2, W * 0.004);
+
+            // Neighbor boxes (yellow)
+            ctx.strokeStyle = 'rgba(255, 215, 0, 0.95)';
+            ctx.lineWidth = lw;
+            for (const nb of t2.neighbors) {
+                const r = patchRect(nb.index);
+                ctx.strokeRect(r.x * pw, r.y * ph, pw, ph);
+            }
+
+            // Selected box (red)
+            if (t2.selectedIndex != null) {
+                const r = patchRect(t2.selectedIndex);
+                ctx.strokeStyle = 'red';
+                ctx.lineWidth = lw * 1.3;
+                ctx.strokeRect(r.x * pw, r.y * ph, pw, ph);
+            }
+
+            // Hover box (cyan)
+            if (t2.hoverIndex != null && t2.hoverIndex !== t2.selectedIndex) {
+                const r = patchRect(t2.hoverIndex);
+                ctx.strokeStyle = 'cyan';
+                ctx.lineWidth = lw;
+                ctx.strokeRect(r.x * pw, r.y * ph, pw, ph);
+            }
+        }
+
+        function updateCrop(index) {
+            cropCtx.clearRect(0, 0, cropCanvas.width, cropCanvas.height);
+            if (index == null) return;
+            const r = patchRect(index);
+            cropCtx.imageSmoothingEnabled = false;
+            cropCtx.drawImage(
+                currentData.imageObj,
+                r.sx, r.sy, r.sw, r.sh,
+                0, 0, cropCanvas.width, cropCanvas.height
+            );
+        }
+
+        // --- Linked hover / selection ---
+        function setHover(index) {
+            t2.hoverIndex = index;
+            const r = patchRect(index);
+            leftCoords2.textContent = `Patch (${r.x}, ${r.y})`;
+            drawLeft2();
+            drawPcaMap();
+            updateCrop(index);
+            applyPointColors();
+        }
+
+        function clearHover() {
+            if (t2.hoverIndex == null) return;
+            t2.hoverIndex = null;
+            leftCoords2.textContent = '';
+            drawLeft2();
+            drawPcaMap();
+            updateCrop(t2.selectedIndex);
+            applyPointColors();
+        }
+
+        function setSelected(index) {
+            t2.selectedIndex = index;
+            computeNeighbors(index);
+            drawLeft2();
+            drawPcaMap();
+            applyPointColors();
+            renderNeighborsPanel(index);
+            focusCameraOnPoint(index);
+        }
+
+        // Clear the current selection/hover, restore full opacity and reset the camera.
+        function resetView() {
+            t2.selectedIndex = null;
+            t2.hoverIndex = null;
+            t2.neighbors = [];
+            updateCrop(null);
+            drawLeft2();
+            drawPcaMap();
+            applyPointColors();
+            neighborsPanel.classList.add('hidden');
+            if (t2.three) {
+                t2.three.cameraTween = null;
+                t2.three.camera.position.set(0, 0, 24);
+                t2.three.controls.target.set(0, 0, 0);
+                t2.three.camera.lookAt(0, 0, 0);
+                t2.three.controls.update();
+            }
+        }
+
+        // Recompute neighbors + refresh views for the current selection (mode/param change).
+        function refreshSelection() {
+            if (t2.selectedIndex == null) return;
+            computeNeighbors(t2.selectedIndex);
+            drawLeft2();
+            drawPcaMap();
+            applyPointColors();
+            renderNeighborsPanel(t2.selectedIndex);
+        }
+
+        function toggleGrayNonMatch() {
+            t2.grayNonMatch = !t2.grayNonMatch;
+            grayNonMatchBtn.textContent = 'Gray non-match: ' + (t2.grayNonMatch ? 'On' : 'Off');
+            grayNonMatchBtn.classList.toggle('bg-blue-600', t2.grayNonMatch);
+            grayNonMatchBtn.classList.toggle('text-white', t2.grayNonMatch);
+            grayNonMatchBtn.classList.toggle('bg-white', !t2.grayNonMatch);
+            grayNonMatchBtn.classList.toggle('text-gray-600', !t2.grayNonMatch);
+            applyPointColors();
+        }
+
+        function setNeighborMode(mode) {
+            t2.neighborMode = mode;
+            const topk = mode === 'topk';
+            topkControl.classList.toggle('hidden', !topk);
+            thresholdControl.classList.toggle('hidden', topk);
+            modeTopKBtn.classList.toggle('bg-blue-600', topk);
+            modeTopKBtn.classList.toggle('text-white', topk);
+            modeTopKBtn.classList.toggle('bg-white', !topk);
+            modeTopKBtn.classList.toggle('text-gray-600', !topk);
+            modeThresholdBtn.classList.toggle('bg-blue-600', !topk);
+            modeThresholdBtn.classList.toggle('text-white', !topk);
+            modeThresholdBtn.classList.toggle('bg-white', topk);
+            modeThresholdBtn.classList.toggle('text-gray-600', topk);
+            refreshSelection();
+        }
+
+        function computeNeighbors(index) {
+            const dim = currentData.dim;
+            const embs = currentData.embeddings;
+            const n = currentData.wFeat * currentData.hFeat;
+            const qOff = index * dim;
+            const sims = new Array(n);
+            for (let i = 0; i < n; i++) {
+                let dot = 0;
+                const off = i * dim;
+                for (let d = 0; d < dim; d++) dot += embs[qOff + d] * embs[off + d];
+                sims[i] = { index: i, sim: dot };
+            }
+            sims.sort((a, b) => b.sim - a.sim);
+            const others = sims.filter(s => s.index !== index); // exclude the query itself
+            if (t2.neighborMode === 'threshold') {
+                t2.neighbors = others.filter(s => s.sim >= t2.threshold);
+            } else {
+                t2.neighbors = others.slice(0, t2.k);
+            }
+        }
+
+        function renderNeighborsPanel(index) {
+            const qr = patchRect(index);
+            const total = t2.neighbors.length;
+            if (t2.neighborMode === 'threshold') {
+                neighborsTitle.textContent = `Patches ≥ ${t2.threshold.toFixed(2)} similarity (${total})`;
+            } else {
+                neighborsTitle.textContent = `${total} Nearest Patches`;
+            }
+            neighborsQuery.textContent = `to query patch (${qr.x}, ${qr.y})`;
+            neighborsList.innerHTML = '';
+
+            const shown = t2.neighbors.slice(0, NEIGHBOR_THUMB_CAP);
+            for (const nb of shown) {
+                const r = patchRect(nb.index);
+                const card = document.createElement('div');
+                card.className = 'flex flex-col items-center gap-1 p-2 border border-gray-200 rounded';
+
+                const thumb = document.createElement('canvas');
+                thumb.width = 56; thumb.height = 56;
+                thumb.className = 'border border-gray-300 rounded';
+                const tctx = thumb.getContext('2d');
+                tctx.imageSmoothingEnabled = false;
+                tctx.drawImage(currentData.imageObj, r.sx, r.sy, r.sw, r.sh, 0, 0, 56, 56);
+                card.appendChild(thumb);
+
+                const label = document.createElement('span');
+                label.className = 'text-xs text-gray-600';
+                label.textContent = `(${r.x}, ${r.y})`;
+                card.appendChild(label);
+
+                const sim = document.createElement('span');
+                sim.className = 'text-xs font-semibold text-blue-600';
+                sim.textContent = `${(nb.sim * 100).toFixed(1)}%`;
+                card.appendChild(sim);
+
+                neighborsList.appendChild(card);
+            }
+            if (total > shown.length) {
+                const more = document.createElement('div');
+                more.className = 'flex items-center justify-center p-2 text-xs text-gray-500';
+                more.textContent = `+ ${total - shown.length} more`;
+                neighborsList.appendChild(more);
+            }
+            neighborsPanel.classList.remove('hidden');
+        }
+
+        // --- Event listeners (attached once) ---
+        function attachTab2Listeners() {
+            pcaOpacity.addEventListener('input', () => {
+                pcaOpacityVal.textContent = parseFloat(pcaOpacity.value).toFixed(2);
+                if (currentData.pcaRgb) {
+                    renderPcaBase();
+                    drawPcaMap();
+                }
+            });
+
+            topkSlider.addEventListener('input', () => {
+                t2.k = parseInt(topkSlider.value, 10);
+                topkVal.textContent = t2.k;
+                if (t2.neighborMode === 'topk') refreshSelection();
+            });
+
+            thresholdSlider.addEventListener('input', () => {
+                t2.threshold = parseFloat(thresholdSlider.value);
+                thresholdVal.textContent = t2.threshold.toFixed(2);
+                if (t2.neighborMode === 'threshold') refreshSelection();
+            });
+
+            fadeSlider.addEventListener('input', () => {
+                t2.fadeOpacity = parseFloat(fadeSlider.value);
+                fadeVal.textContent = t2.fadeOpacity.toFixed(2);
+                applyPointColors();
+            });
+
+            pointSizeSlider.addEventListener('input', () => {
+                t2.pointSizeScale = parseFloat(pointSizeSlider.value);
+                pointSizeVal.textContent = t2.pointSizeScale.toFixed(1) + '×';
+                applyPointSize();
+            });
+
+            for (const canvas of [leftCanvas2, pcaCanvas]) {
+                canvas.addEventListener('mousemove', (e) => {
+                    if (!currentData.pcaCoords) return;
+                    setHover(canvasToPatchIndex(canvas, e));
+                });
+                canvas.addEventListener('mouseleave', clearHover);
+                canvas.addEventListener('click', (e) => {
+                    if (!currentData.pcaCoords) return;
+                    setSelected(canvasToPatchIndex(canvas, e));
+                });
+            }
+
+            window.addEventListener('resize', () => { if (t2.three) resizeThree(); });
+        }
+
+        function canvasToPatchIndex(canvas, e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
+            const pw = canvas.width / currentData.wFeat;
+            const ph = canvas.height / currentData.hFeat;
+            let fx = Math.floor(x / pw);
+            let fy = Math.floor(y / ph);
+            fx = Math.max(0, Math.min(fx, currentData.wFeat - 1));
+            fy = Math.max(0, Math.min(fy, currentData.hFeat - 1));
+            return fy * currentData.wFeat + fx;
+        }
+
+        // ============================================================
+        // THREE.JS 3D SCATTER
+        // ============================================================
+        let threeAnimating = false;
+
+        function buildThree() {
+            const coords = currentData.pcaCoords;
+            const rgb = currentData.pcaRgb;
+            const n = coords.length / 3;
+
+            // Normalize coords into a centered cube (~[-8, 8]).
+            const min = [Infinity, Infinity, Infinity];
+            const max = [-Infinity, -Infinity, -Infinity];
+            for (let i = 0; i < n; i++) {
+                for (let c = 0; c < 3; c++) {
+                    const v = coords[i * 3 + c];
+                    if (v < min[c]) min[c] = v;
+                    if (v > max[c]) max[c] = v;
+                }
+            }
+            const center = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
+            const maxRange = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2]) || 1;
+            const scale = 16 / maxRange;
+
+            const positions = new Float32Array(n * 3);
+            const colors = new Float32Array(n * 4);
+            for (let i = 0; i < n; i++) {
+                for (let c = 0; c < 3; c++) {
+                    positions[i * 3 + c] = (coords[i * 3 + c] - center[c]) * scale;
+                    colors[i * 4 + c] = rgb[i * 3 + c];
+                }
+                colors[i * 4 + 3] = 1.0; // alpha
+            }
+
+            // Dispose any previous renderer/scene.
+            if (t2.three) {
+                if (t2.three.resizeObserver) t2.three.resizeObserver.disconnect();
+                t2.three.renderer.dispose();
+                if (t2.three.renderer.domElement.parentNode === threeContainer) {
+                    threeContainer.removeChild(t2.three.renderer.domElement);
+                }
+            }
+
+            const width = threeContainer.clientWidth || 400;
+            const height = threeContainer.clientHeight || 400;
+
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x111827);
+
+            const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
+            camera.position.set(0, 0, 24);
+
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio || 1);
+            renderer.setSize(width, height);
+            threeContainer.appendChild(renderer.domElement);
+
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.1;
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 4));
+
+            const pointSize = Math.max(0.12, 16 / Math.cbrt(n));
+            // Starts opaque (depthWrite on) so the cloud reads as solid. When a patch is
+            // selected and non-match opacity < 1, applyPointColors switches this to a
+            // transparent/no-depth-write mode so faded points show the matches through them.
+            const material = new THREE.PointsMaterial({
+                size: pointSize * t2.pointSizeScale, vertexColors: true, sizeAttenuation: true,
+                transparent: false, depthWrite: true
+            });
+            const points = new THREE.Points(geometry, material);
+            scene.add(points);
+
+            // Keep a pristine copy of the per-point RGBA colors so highlights (which only
+            // recolor/re-alpha points, never resize them) can be applied and reverted.
+            const baseColors = colors.slice();
+
+            const raycaster = new THREE.Raycaster();
+            raycaster.params.Points.threshold = pointSize * t2.pointSizeScale * 1.3;
+            const mouse = new THREE.Vector2();
+
+            // Pick the point closest to the cursor ray (smallest distanceToRay),
+            // not merely the closest to the camera — otherwise a nearer point within
+            // the pick threshold gets selected and appears offset from the cursor.
+            function pick3D(e) {
+                const rect = renderer.domElement.getBoundingClientRect();
+                mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+                const hits = raycaster.intersectObject(points);
+                if (hits.length === 0) return null;
+                let best = hits[0];
+                for (const h of hits) {
+                    if (h.distanceToRay < best.distanceToRay) best = h;
+                }
+                return best.index;
+            }
+
+            // Track whether the user is actively rotating/panning/zooming so we don't
+            // fire hover picks mid-interaction (which would grab whatever point the
+            // cursor happens to land on).
+            let interacting = false;
+            controls.addEventListener('start', () => { interacting = true; });
+            controls.addEventListener('end', () => { interacting = false; });
+
+            // Hover is disabled while interacting and once a point is selected
+            // (selection stays until the user presses "Reset view").
+            renderer.domElement.addEventListener('pointermove', (e) => {
+                if (interacting || e.buttons !== 0 || t2.selectedIndex != null) {
+                    renderer.domElement.style.cursor = 'grab';
+                    if (t2.hoverIndex != null) clearHover();
+                    return;
+                }
+                const idx = pick3D(e);
+                if (idx != null) {
+                    renderer.domElement.style.cursor = 'pointer';
+                    if (idx !== t2.hoverIndex) setHover(idx);
+                } else {
+                    renderer.domElement.style.cursor = 'grab';
+                    clearHover();
+                }
+            });
+
+            // Selection triggers on release of the left button, but only if it was a
+            // click (not a drag) — so ending a rotation over a point doesn't select it.
+            let downX = 0, downY = 0, downBtn = -1;
+            renderer.domElement.addEventListener('pointerdown', (e) => {
+                downX = e.clientX; downY = e.clientY; downBtn = e.button;
+            });
+            renderer.domElement.addEventListener('pointerup', (e) => {
+                if (e.button !== 0 || downBtn !== 0) return;
+                const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
+                if (moved > 5) return; // treated as a drag, not a click
+                const idx = pick3D(e);
+                if (idx != null) setSelected(idx);
+            });
+
+            // Keep the renderer/camera in sync with the container's actual size
+            // (the tab may have been hidden when the scene was first built).
+            const resizeObserver = new ResizeObserver(() => resizeThree());
+            resizeObserver.observe(threeContainer);
+
+            t2.three = {
+                scene, camera, renderer, controls, points, positions, material, raycaster,
+                colorAttr: geometry.getAttribute('color'), baseColors, pointSize,
+                resizeObserver, cameraTween: null
+            };
+
+            applyPointColors();
+
+            if (!threeAnimating) {
+                threeAnimating = true;
+                animateThree();
+            }
+        }
+
+        function animateThree() {
+            requestAnimationFrame(animateThree);
+            if (!t2.three) return;
+            updateCameraTween();
+            t2.three.controls.update();
+            t2.three.renderer.render(t2.three.scene, t2.three.camera);
+        }
+
+        // Smoothly orbit the camera so the given point sits between the camera and the
+        // cloud center (i.e. closest to the camera), keeping the current zoom distance.
+        function focusCameraOnPoint(index) {
+            const three = t2.three;
+            if (!three) return;
+            const p = new THREE.Vector3(
+                three.positions[index * 3],
+                three.positions[index * 3 + 1],
+                three.positions[index * 3 + 2]
+            );
+            const target = three.controls.target.clone();
+            const dir = p.clone().sub(target);
+            if (dir.lengthSq() < 1e-9) return;
+            three.cameraTween = {
+                startDir: three.camera.position.clone().sub(target).normalize(),
+                endDir: dir.normalize(),
+                radius: three.camera.position.distanceTo(target),
+                target,
+                start: performance.now(),
+                duration: 600
+            };
+        }
+
+        function updateCameraTween() {
+            const three = t2.three;
+            const tw = three.cameraTween;
+            if (!tw) return;
+            let k = (performance.now() - tw.start) / tw.duration;
+            if (k >= 1) k = 1;
+            const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; // easeInOutQuad
+            const dir = slerpVectors(tw.startDir, tw.endDir, e);
+            three.camera.position.copy(tw.target).add(dir.multiplyScalar(tw.radius));
+            three.camera.lookAt(tw.target);
+            if (k >= 1) three.cameraTween = null;
+        }
+
+        function slerpVectors(a, b, t) {
+            const dot = THREE.MathUtils.clamp(a.dot(b), -1, 1);
+            const theta = Math.acos(dot);
+            if (theta < 1e-6) return b.clone();
+            const sin = Math.sin(theta);
+            const wa = Math.sin((1 - t) * theta) / sin;
+            const wb = Math.sin(t * theta) / sin;
+            return a.clone().multiplyScalar(wa).add(b.clone().multiplyScalar(wb));
+        }
+
+        function resizeThree() {
+            if (!t2.three) return;
+            const width = threeContainer.clientWidth;
+            const height = threeContainer.clientHeight;
+            if (!width || !height) return;
+            t2.three.camera.aspect = width / height;
+            t2.three.camera.updateProjectionMatrix();
+            t2.three.renderer.setSize(width, height);
+        }
+
+        // Highlight points by recoloring only (never resizing): neighbors gold,
+        // selected red, hover cyan. When a patch is selected, non-similar points have
+        // their opacity lowered (t2.fadeOpacity) so the similar regions stand out and
+        // show through.
+        // Highlight points by recoloring only (never resizing): neighbors gold,
+        // selected red, hover cyan. When a patch is selected, non-similar points have
+        // their opacity lowered (t2.fadeOpacity) so the similar regions stand out, and
+        // can optionally be desaturated to gray. The material switches to a transparent /
+        // no-depth-write mode only while fading, so at full opacity the cloud reads solid.
+        function applyPointColors() {
+            if (!t2.three) return;
+            const attr = t2.three.colorAttr;
+            const arr = attr.array;
+            const base = t2.three.baseColors;
+            arr.set(base);
+
+            const hasSelection = t2.selectedIndex != null;
+            const n = arr.length / 4;
+            if (hasSelection) {
+                const a = t2.fadeOpacity;
+                for (let i = 0; i < n; i++) {
+                    arr[i * 4 + 3] = a;
+                    if (t2.grayNonMatch) {
+                        arr[i * 4] = 0.5; arr[i * 4 + 1] = 0.5; arr[i * 4 + 2] = 0.5;
+                    }
+                }
+            }
+
+            const setColor = (index, r, g, b) => {
+                arr[index * 4] = r; arr[index * 4 + 1] = g; arr[index * 4 + 2] = b;
+                arr[index * 4 + 3] = 1.0;
+            };
+
+            for (const nb of t2.neighbors) setColor(nb.index, 1.0, 0.843, 0.0);  // gold
+            if (t2.selectedIndex != null) setColor(t2.selectedIndex, 1.0, 0.13, 0.13);  // red
+            if (t2.hoverIndex != null && t2.hoverIndex !== t2.selectedIndex) {
+                setColor(t2.hoverIndex, 0.0, 1.0, 1.0);  // cyan
+            }
+            attr.needsUpdate = true;
+
+            // Only go transparent (and drop depth writes) when actually fading points;
+            // otherwise keep the cloud fully opaque so points properly occlude each other.
+            const fading = hasSelection && t2.fadeOpacity < 0.99;
+            const mat = t2.three.material;
+            if (mat.transparent !== fading || mat.depthWrite !== !fading) {
+                mat.transparent = fading;
+                mat.depthWrite = !fading;
+                mat.needsUpdate = true;
+            }
+        }
+
+        // Update the point (square) size from the slider multiplier.
+        function applyPointSize() {
+            if (!t2.three) return;
+            const size = t2.three.pointSize * t2.pointSizeScale;
+            t2.three.material.size = size;
+            t2.three.raycaster.params.Points.threshold = size * 1.3;
         }
     </script>
 </body>

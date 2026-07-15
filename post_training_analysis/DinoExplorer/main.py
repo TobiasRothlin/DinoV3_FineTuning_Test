@@ -41,6 +41,21 @@ def encode_to_base64(tensor: torch.Tensor) -> str:
     return base64.b64encode(np_array.tobytes()).decode('utf-8')
 
 
+def encode_ndarray_to_base64(np_array: np.ndarray) -> str:
+    """Converts a NumPy array to a base64 encoded string of Float32 bytes."""
+    np_array = np.ascontiguousarray(np_array.astype(np.float32))
+    return base64.b64encode(np_array.tobytes()).decode('utf-8')
+
+
+def compute_pca_coords(patch_embeddings: np.ndarray, n_components: int = 3) -> np.ndarray:
+    """PCA via SVD on raw patch embeddings. Returns (num_patches, n_components) float32."""
+    centered = patch_embeddings - patch_embeddings.mean(axis=0, keepdims=True)
+    # Vt rows are the principal axes (right singular vectors), ordered by variance.
+    _, _, vt = np.linalg.svd(centered, full_matrices=False)
+    components = vt[:n_components]
+    return centered @ components.T
+
+
 @app.get("/")
 def serve_frontend():
     """Serves the Index.html file on the root call."""
@@ -74,6 +89,10 @@ async def process_image(file: UploadFile = File(...)):
     # Extract patches based on your logic[cite: 1]
     patch_embs = last_hidden_state[0, -num_patches:]
 
+    # PCA(3) on the RAW patch embeddings (before normalization), matching image_patch_pca.py
+    raw_patch_np = patch_embs.cpu().numpy().astype(np.float32)
+    pca_coords = compute_pca_coords(raw_patch_np, n_components=3)
+
     # L2 Normalize the patch embeddings as in your script[cite: 1]
     patch_embs = F.normalize(patch_embs, p=2, dim=-1)
 
@@ -84,6 +103,7 @@ async def process_image(file: UploadFile = File(...)):
         "original_size": {"width": orig_w, "height": orig_h},
         "cls_vector_b64": encode_to_base64(cls_token),
         "patch_embeddings_b64": encode_to_base64(patch_embs),
+        "pca_coords_b64": encode_ndarray_to_base64(pca_coords),
         "embedding_dim": patch_embs.shape[-1]
     }
 

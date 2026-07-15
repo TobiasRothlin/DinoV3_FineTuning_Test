@@ -50,6 +50,9 @@
                 <button id="tabBtn2" onclick="showTab('tabEmbeddingSpace')" class="whitespace-nowrap py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium text-sm transition">
                     Embedding Space (PCA)
                 </button>
+                <button id="tabBtn3" onclick="showTab('tabClsSimilarity')" class="whitespace-nowrap py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium text-sm transition">
+                    CLS Similarity
+                </button>
                 <button class="whitespace-nowrap py-4 px-1 border-b-2 border-transparent text-gray-500 font-medium text-sm transition cursor-not-allowed opacity-50" title="Coming Soon">
                     Attention Maps (Soon)
                 </button>
@@ -195,6 +198,105 @@
             </div>
         </div>
 
+        <!-- Tab Content: CLS Similarity -->
+        <div id="tabClsSimilarity" class="flex flex-col gap-4 hidden">
+
+            <div class="flex justify-between items-end flex-wrap gap-4">
+                <h2 class="text-xl font-semibold">CLS Token Similarity</h2>
+                <p class="text-sm text-gray-500">Cosine similarity of whole-image CLS embeddings vs the base image.</p>
+            </div>
+
+            <div class="flex flex-col xl:flex-row gap-6 items-start">
+                <!-- Left: Base image (fixed reference) + Preview, same size for comparison -->
+                <div class="bg-white p-4 rounded-lg shadow flex flex-col xl:flex-none">
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <div class="flex flex-col items-center">
+                            <p class="mb-2 font-medium text-gray-700">Base Image (reference)</p>
+                            <div class="relative max-w-full overflow-hidden border border-gray-300 rounded bg-gray-100 mx-auto flex items-center justify-center" id="clsBaseContainer" style="height: 66vh; min-height: 420px;">
+                                <img id="clsBaseImg" class="max-w-full max-h-full object-contain" />
+                            </div>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <p class="mb-2 font-medium text-gray-700">Preview <span id="clsPreviewLabel" class="text-xs font-normal text-gray-500"></span></p>
+                            <div class="relative max-w-full overflow-hidden border border-gray-300 rounded bg-gray-100 mx-auto flex items-center justify-center" id="clsPreviewContainer" style="height: 66vh; min-height: 420px;">
+                                <img id="clsPreviewImg" class="max-w-full max-h-full object-contain" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Middle: Upload + comparison image list -->
+                <div class="bg-white p-4 rounded-lg shadow flex flex-col xl:flex-none w-full xl:w-80">
+                    <p class="mb-2 font-medium text-gray-700">Comparison Images</p>
+                    <input type="file" id="clsFileInput" accept="image/*" multiple class="hidden" onchange="uploadClsImages(this.files)">
+                    <div id="clsDropzone" class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-gray-50 transition cursor-pointer mb-3 text-sm text-gray-500">
+                        Drop images here or click to add
+                    </div>
+                    <p id="clsStatus" class="text-xs text-gray-500 mb-2 h-4"></p>
+                    <div id="clsProgress" class="w-full h-2 bg-gray-200 rounded overflow-hidden mb-3 hidden">
+                        <div id="clsProgressBar" class="h-full bg-blue-600 transition-all duration-200" style="width: 0%;"></div>
+                    </div>
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-xs text-gray-500">Sort by</span>
+                        <div class="inline-flex rounded overflow-hidden border border-gray-300">
+                            <button id="clsSortUpload" onclick="setClsSortMode('upload')" class="px-2 py-1 text-xs font-medium bg-blue-600 text-white transition">Upload</button>
+                            <button id="clsSortSim" onclick="setClsSortMode('similarity')" class="px-2 py-1 text-xs font-medium bg-white text-gray-600 hover:bg-gray-100 transition">Similarity</button>
+                        </div>
+                    </div>
+                    <div id="clsList" class="flex flex-col gap-2 overflow-y-auto pr-1" style="max-height: 52vh;"></div>
+                </div>
+
+                <!-- Right: 3D CLS Vector Space (prominent) -->
+                <div class="bg-white p-4 rounded-lg shadow flex flex-col items-center xl:flex-1 min-w-0 w-full">
+                    <div class="w-full flex justify-between items-center mb-2">
+                        <p class="font-medium text-gray-700">3D CLS Vector Space</p>
+                        <p class="text-xs text-gray-500">Drag to rotate · scroll to zoom · hover/click a point</p>
+                    </div>
+
+                    <!-- 3D view controls -->
+                    <div class="w-full flex items-center flex-wrap gap-x-5 gap-y-2 mb-3 pb-3 border-b border-gray-200">
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm text-gray-600">Neighbor mode</span>
+                            <div class="inline-flex rounded overflow-hidden border border-gray-300">
+                                <button id="clsModeTopK" onclick="setClsNeighborMode('topk')" class="px-3 py-1 text-xs font-medium bg-blue-600 text-white transition">Top-K</button>
+                                <button id="clsModeThreshold" onclick="setClsNeighborMode('threshold')" class="px-3 py-1 text-xs font-medium bg-white text-gray-600 hover:bg-gray-100 transition">Threshold</button>
+                            </div>
+                        </div>
+
+                        <div id="clsTopkControl" class="flex items-center gap-2">
+                            <label for="clsTopkSlider" class="text-sm text-gray-600">K</label>
+                            <input id="clsTopkSlider" type="range" min="1" max="50" step="1" value="10" class="w-28 accent-blue-600">
+                            <span id="clsTopkVal" class="text-xs text-gray-500 w-6">10</span>
+                        </div>
+
+                        <div id="clsThresholdControl" class="flex items-center gap-2 hidden">
+                            <label for="clsThresholdSlider" class="text-sm text-gray-600">Min similarity</label>
+                            <input id="clsThresholdSlider" type="range" min="0" max="1" step="0.01" value="0.80" class="w-28 accent-blue-600">
+                            <span id="clsThresholdVal" class="text-xs text-gray-500 w-8">0.80</span>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <label for="clsFadeSlider" class="text-sm text-gray-600">Non-match opacity</label>
+                            <input id="clsFadeSlider" type="range" min="0" max="1" step="0.01" value="0.35" class="w-28 accent-blue-600">
+                            <span id="clsFadeVal" class="text-xs text-gray-500 w-8">0.35</span>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <label for="clsPointSizeSlider" class="text-sm text-gray-600">Point size</label>
+                            <input id="clsPointSizeSlider" type="range" min="0.5" max="4" step="0.05" value="1.5" class="w-28 accent-blue-600">
+                            <span id="clsPointSizeVal" class="text-xs text-gray-500 w-8">1.5×</span>
+                        </div>
+
+                        <button id="clsGrayBtn" onclick="toggleClsGrayNonMatch()" class="px-3 py-1 text-xs font-medium rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 transition">Gray non-match: Off</button>
+
+                        <button id="clsResetBtn" onclick="resetClsView()" class="px-3 py-1 text-xs font-medium rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 transition">Reset view</button>
+                    </div>
+
+                    <div id="threeContainerCls" class="relative w-full overflow-hidden border border-gray-300 rounded bg-gray-900" style="height: 60vh; min-height: 440px;"></div>
+                </div>
+            </div>
+        </div>
+
     </main>
 
     <script>
@@ -208,7 +310,8 @@
             origHeight: 0,
             imageObj: null,
             pcaCoords: null,
-            pcaRgb: null
+            pcaRgb: null,
+            clsVector: null
         };
 
         let interactionState = {
@@ -278,6 +381,35 @@
         const pointSizeVal = document.getElementById('pointSizeVal');
         const grayNonMatchBtn = document.getElementById('grayNonMatchBtn');
 
+        // --- TAB 3 (CLS Similarity) DOM + STATE ---
+        const tabBtn3 = document.getElementById('tabBtn3');
+        const tabClsSimilarity = document.getElementById('tabClsSimilarity');
+        const clsBaseImg = document.getElementById('clsBaseImg');
+        const clsFileInput = document.getElementById('clsFileInput');
+        const clsDropzone = document.getElementById('clsDropzone');
+        const clsStatus = document.getElementById('clsStatus');
+        const clsProgress = document.getElementById('clsProgress');
+        const clsProgressBar = document.getElementById('clsProgressBar');
+        const clsList = document.getElementById('clsList');
+        const threeContainerCls = document.getElementById('threeContainerCls');
+        const clsPreviewImg = document.getElementById('clsPreviewImg');
+        const clsPreviewLabel = document.getElementById('clsPreviewLabel');
+        const clsSortUpload = document.getElementById('clsSortUpload');
+        const clsSortSim = document.getElementById('clsSortSim');
+        const clsModeTopKBtn = document.getElementById('clsModeTopK');
+        const clsModeThresholdBtn = document.getElementById('clsModeThreshold');
+        const clsTopkControl = document.getElementById('clsTopkControl');
+        const clsThresholdControl = document.getElementById('clsThresholdControl');
+        const clsTopkSlider = document.getElementById('clsTopkSlider');
+        const clsTopkVal = document.getElementById('clsTopkVal');
+        const clsThresholdSlider = document.getElementById('clsThresholdSlider');
+        const clsThresholdVal = document.getElementById('clsThresholdVal');
+        const clsFadeSlider = document.getElementById('clsFadeSlider');
+        const clsFadeVal = document.getElementById('clsFadeVal');
+        const clsPointSizeSlider = document.getElementById('clsPointSizeSlider');
+        const clsPointSizeVal = document.getElementById('clsPointSizeVal');
+        const clsGrayBtn = document.getElementById('clsGrayBtn');
+
         const pcaOffscreen = document.createElement('canvas');
         const pcaOffscreenCtx = pcaOffscreen.getContext('2d');
 
@@ -297,18 +429,40 @@
             grayNonMatch: false     // desaturate non-matching points to gray
         };
 
+        // CLS-similarity tab state. images[0] is always the base (reference) image.
+        const t3 = {
+            images: [],             // [{name, url, imgObj, cls (Float32Array), sim}]
+            coords: null,           // Float32Array(N*3) PCA positions
+            neighbors: [],          // array of {index, sim} among comparison images
+            hoverIndex: null,
+            previewIndex: null,     // clicking a point previews it (does NOT change reference)
+            three: null,
+            neighborMode: 'topk',
+            k: 10,
+            threshold: 0.80,
+            fadeOpacity: 0.35,
+            pointSizeScale: 1.5,
+            grayNonMatch: false,
+            sortMode: 'upload'      // 'upload' | 'similarity'
+        };
+        let clsListeners = false;
+        let clsThreeAnimating = false;
+
         function showTab(tabId) {
             activeTab = tabId;
-            const showSim = tabId === 'tabPatchSimilarity';
-            tabPatchSimilarity.classList.toggle('hidden', !showSim);
-            tabEmbeddingSpace.classList.toggle('hidden', showSim);
-            tabBtn1.classList.toggle('tab-active', showSim);
-            tabBtn2.classList.toggle('tab-active', !showSim);
+            const isSim = tabId === 'tabPatchSimilarity';
+            const isEmb = tabId === 'tabEmbeddingSpace';
+            const isCls = tabId === 'tabClsSimilarity';
+            tabPatchSimilarity.classList.toggle('hidden', !isSim);
+            tabEmbeddingSpace.classList.toggle('hidden', !isEmb);
+            tabClsSimilarity.classList.toggle('hidden', !isCls);
+            tabBtn1.classList.toggle('tab-active', isSim);
+            tabBtn2.classList.toggle('tab-active', isEmb);
+            tabBtn3.classList.toggle('tab-active', isCls);
 
-            // The 3D renderer needs a resize once its container becomes visible.
-            if (!showSim && t2.three) {
-                requestAnimationFrame(resizeThree);
-            }
+            // The 3D renderers need a resize once their container becomes visible.
+            if (isEmb && t2.three) requestAnimationFrame(resizeThree);
+            if (isCls && t3.three) requestAnimationFrame(resizeThreeCls);
         }
 
         // --- DRAG & DROP LOGIC ---
@@ -380,6 +534,7 @@
                 currentData.origHeight = data.original_size.height;
                 currentData.pcaCoords = data.pca_coords_b64 ? decodeFloat32Array(data.pca_coords_b64) : null;
                 currentData.pcaRgb = computePcaRgb(currentData.pcaCoords);
+                currentData.clsVector = data.cls_vector_b64 ? decodeFloat32Array(data.cls_vector_b64) : null;
 
                 setupCanvases();
 
@@ -389,6 +544,7 @@
                 clearRightCanvas();
 
                 initTab2();
+                initTab3();
 
             } catch (error) {
                 updateStatus(`Error: ${error.message}`, true);
@@ -1353,6 +1509,575 @@
             const size = t2.three.pointSize * t2.pointSizeScale;
             t2.three.material.size = size;
             t2.three.raycaster.params.Points.threshold = size * 1.3;
+        }
+
+        // ==================================================================
+        // TAB 3 — CLS SIMILARITY
+        // ==================================================================
+
+        function l2normalize(vec) {
+            let s = 0;
+            for (let i = 0; i < vec.length; i++) s += vec[i] * vec[i];
+            const inv = s > 0 ? 1 / Math.sqrt(s) : 0;
+            const out = new Float32Array(vec.length);
+            for (let i = 0; i < vec.length; i++) out[i] = vec[i] * inv;
+            return out;
+        }
+
+        // Cyclic Jacobi eigensolver for a small symmetric n×n matrix (row-major arrays).
+        // Returns { values: number[], vectors: number[][] } where vectors[k] is the
+        // k-th eigenvector (length n). Eigenpairs are NOT sorted.
+        function jacobiEigenSymmetric(A, n) {
+            const a = A.map(row => row.slice());
+            const V = Array.from({ length: n }, (_, i) =>
+                Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
+            for (let sweep = 0; sweep < 100; sweep++) {
+                let off = 0;
+                for (let p = 0; p < n; p++)
+                    for (let q = p + 1; q < n; q++) off += a[p][q] * a[p][q];
+                if (off < 1e-20) break;
+                for (let p = 0; p < n; p++) {
+                    for (let q = p + 1; q < n; q++) {
+                        if (Math.abs(a[p][q]) < 1e-18) continue;
+                        const theta = (a[q][q] - a[p][p]) / (2 * a[p][q]);
+                        const t = Math.sign(theta || 1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1));
+                        const c = 1 / Math.sqrt(t * t + 1);
+                        const s = t * c;
+                        for (let i = 0; i < n; i++) {
+                            const aip = a[i][p], aiq = a[i][q];
+                            a[i][p] = c * aip - s * aiq;
+                            a[i][q] = s * aip + c * aiq;
+                        }
+                        for (let i = 0; i < n; i++) {
+                            const api = a[p][i], aqi = a[q][i];
+                            a[p][i] = c * api - s * aqi;
+                            a[q][i] = s * api + c * aqi;
+                        }
+                        for (let i = 0; i < n; i++) {
+                            const vip = V[i][p], viq = V[i][q];
+                            V[i][p] = c * vip - s * viq;
+                            V[i][q] = s * vip + c * viq;
+                        }
+                    }
+                }
+            }
+            const values = [];
+            const vectors = [];
+            for (let k = 0; k < n; k++) {
+                values.push(a[k][k]);
+                vectors.push(V.map(row => row[k]));
+            }
+            return { values, vectors };
+        }
+
+        // PCA(3) of N CLS vectors via the Gram-matrix trick (works for small N, large dim):
+        // center → G = Xc·Xcᵀ (N×N) → top-3 eigenpairs → coords = eigvec·sqrt(eigval).
+        function clsPca3D(vectors, dim) {
+            const n = vectors.length;
+            const coords = new Float32Array(n * 3);
+            if (n === 0) return coords;
+
+            // Center the vectors.
+            const mean = new Float64Array(dim);
+            for (const v of vectors) for (let d = 0; d < dim; d++) mean[d] += v[d];
+            for (let d = 0; d < dim; d++) mean[d] /= n;
+            const Xc = vectors.map(v => {
+                const row = new Float64Array(dim);
+                for (let d = 0; d < dim; d++) row[d] = v[d] - mean[d];
+                return row;
+            });
+
+            // Gram matrix G (N×N).
+            const G = Array.from({ length: n }, () => new Array(n).fill(0));
+            for (let i = 0; i < n; i++) {
+                for (let j = i; j < n; j++) {
+                    let s = 0;
+                    const xi = Xc[i], xj = Xc[j];
+                    for (let d = 0; d < dim; d++) s += xi[d] * xj[d];
+                    G[i][j] = s; G[j][i] = s;
+                }
+            }
+
+            const { values, vectors: evecs } = jacobiEigenSymmetric(G, n);
+            const order = values.map((v, i) => i).sort((a, b) => values[b] - values[a]);
+            for (let c = 0; c < 3; c++) {
+                const idx = order[c];
+                if (idx === undefined) continue;
+                const lambda = Math.max(values[idx], 0);
+                const scale = Math.sqrt(lambda);
+                const evec = evecs[idx];
+                for (let i = 0; i < n; i++) coords[i * 3 + c] = evec[i] * scale;
+            }
+            return coords;
+        }
+
+        // --- Init / recompute ---
+        function initTab3() {
+            if (!currentData.clsVector) return;
+            // Revoke old comparison object URLs (keep base — its URL is shared).
+            for (let i = 1; i < t3.images.length; i++) {
+                if (t3.images[i].url) URL.revokeObjectURL(t3.images[i].url);
+            }
+            t3.images = [{
+                name: 'Base', url: currentData.imageObj.src,
+                imgObj: currentData.imageObj, cls: currentData.clsVector, sim: 1.0
+            }];
+            t3.hoverIndex = null;
+            t3.previewIndex = null;
+            t3.neighbors = [];
+            t3.coords = null;
+            clsBaseImg.src = currentData.imageObj.src;
+            clsPreviewImg.removeAttribute('src');
+            clsPreviewLabel.textContent = '';
+            clsStatus.textContent = '0 comparison image(s).';
+            recomputeCls();
+            if (!clsListeners) { attachClsListeners(); clsListeners = true; }
+        }
+
+        function recomputeCls() {
+            if (t3.images.length === 0) return;
+            const dim = t3.images[0].cls.length;
+            t3.coords = clsPca3D(t3.images.map(im => im.cls), dim);
+            computeClsSims();
+            computeClsNeighbors();
+            buildThreeCls();
+            renderClsList();
+            updateClsPreviewDisplay();
+        }
+
+        function computeClsSims() {
+            const bn = l2normalize(t3.images[0].cls);
+            for (const im of t3.images) {
+                const v = l2normalize(im.cls);
+                let d = 0;
+                for (let i = 0; i < v.length; i++) d += bn[i] * v[i];
+                im.sim = d;
+            }
+        }
+
+        function computeClsNeighbors() {
+            const arr = [];
+            for (let i = 1; i < t3.images.length; i++) arr.push({ index: i, sim: t3.images[i].sim });
+            arr.sort((a, b) => b.sim - a.sim);
+            const sel = t3.neighborMode === 'threshold'
+                ? arr.filter(x => x.sim >= t3.threshold)
+                : arr.slice(0, t3.k);
+            // Normalize the selected sims to [0,1] so the colormap spans the selection.
+            let mn = Infinity, mx = -Infinity;
+            for (const s of sel) { if (s.sim < mn) mn = s.sim; if (s.sim > mx) mx = s.sim; }
+            const range = mx - mn;
+            for (const s of sel) s.t = range > 1e-6 ? (s.sim - mn) / range : 1.0;
+            t3.neighbors = sel;
+        }
+
+        // Similarity colormap shared with the Patch Similarity tab (jet), returned as 0..1 RGB.
+        function clsSimColor(t) {
+            const c = jetColormap(Math.max(0, Math.min(1, t)));
+            return [c[0] / 255, c[1] / 255, c[2] / 255];
+        }
+
+        // --- Upload flow ---
+        async function uploadClsImages(files) {
+            if (!currentData.clsVector) { clsStatus.textContent = 'Upload a base image first.'; return; }
+            const list = Array.from(files || []);
+            clsFileInput.value = '';
+            if (list.length === 0) return;
+
+            // Show the progress bar and populate the UI incrementally per image.
+            const total = list.length;
+            clsProgress.classList.remove('hidden');
+            clsProgressBar.style.width = '0%';
+            let done = 0;
+            for (const file of list) {
+                clsStatus.textContent = `Processing ${done + 1} / ${total}: ${file.name}`;
+                try {
+                    await processClsFile(file);
+                    recomputeCls();               // refresh PCA / list / 3D after each image
+                } catch (e) {
+                    clsStatus.textContent = 'Error: ' + e.message;
+                }
+                done++;
+                clsProgressBar.style.width = `${(done / total) * 100}%`;
+            }
+            clsStatus.textContent = `${t3.images.length - 1} comparison image(s).`;
+            // Briefly leave the full bar visible, then hide it.
+            setTimeout(() => { clsProgress.classList.add('hidden'); clsProgressBar.style.width = '0%'; }, 500);
+        }
+
+        async function processClsFile(file) {
+            const url = URL.createObjectURL(file);
+            const imgObj = new Image();
+            await new Promise((res, rej) => { imgObj.onload = res; imgObj.onerror = rej; imgObj.src = url; });
+            const fd = new FormData();
+            fd.append('file', file);
+            const resp = await fetch('/api/process-image', { method: 'POST', body: fd });
+            if (!resp.ok) throw new Error('Server processing failed');
+            const data = await resp.json();
+            const cls = decodeFloat32Array(data.cls_vector_b64);
+            t3.images.push({ name: file.name, url, imgObj, cls, sim: 0 });
+        }
+
+        function removeClsImage(i) {
+            if (i <= 0 || i >= t3.images.length) return;
+            if (t3.images[i].url) URL.revokeObjectURL(t3.images[i].url);
+            t3.images.splice(i, 1);
+            t3.hoverIndex = null;
+            t3.previewIndex = null;
+            recomputeCls();
+            clsStatus.textContent = `${t3.images.length - 1} comparison image(s).`;
+        }
+
+        // --- Comparison list ---
+        function renderClsList() {
+            clsList.innerHTML = '';
+            const neighborMap = new Map(t3.neighbors.map(nb => [nb.index, nb.t]));
+            // Preserve original indices for actions; order rows per the chosen sort mode.
+            let order = t3.images.map((im, i) => ({ im, i }));
+            if (t3.sortMode === 'similarity') {
+                order = [order[0], ...order.slice(1).sort((a, b) => b.im.sim - a.im.sim)];
+            }
+            order.forEach(({ im, i }) => {
+                const row = document.createElement('div');
+                let border = 'border-gray-200';
+                let bg = 'bg-white hover:bg-gray-50';
+                let accent = null;
+                if (i === 0) { border = 'border-red-400'; bg = 'bg-red-50'; }
+                else if (neighborMap.has(i)) {
+                    const c = clsSimColor(neighborMap.get(i));
+                    accent = `rgb(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)})`;
+                }
+                row.className = `flex items-center gap-2 p-2 rounded border cursor-pointer transition ${border} ${bg}`;
+                if (accent) { row.style.borderLeft = `5px solid ${accent}`; }
+                if (i !== 0 && i === t3.previewIndex) { row.classList.add('ring-2', 'ring-orange-500'); }
+                row.onmouseenter = () => setClsHover(i);
+                row.onmouseleave = () => clearClsHover();
+                row.onclick = () => setClsPreview(i);
+
+                const thumb = document.createElement('img');
+                thumb.src = im.url;
+                thumb.className = 'w-10 h-10 object-cover rounded border border-gray-200 flex-none';
+
+                const info = document.createElement('div');
+                info.className = 'flex-1 min-w-0';
+                const nameEl = document.createElement('div');
+                nameEl.className = 'text-xs font-medium truncate';
+                nameEl.textContent = i === 0 ? 'Base (reference)' : im.name;
+                const simEl = document.createElement('div');
+                simEl.className = 'text-xs text-gray-500';
+                simEl.textContent = i === 0 ? '' : `sim ${(im.sim * 100).toFixed(1)}%`;
+                info.appendChild(nameEl); info.appendChild(simEl);
+
+                row.appendChild(thumb); row.appendChild(info);
+                if (i !== 0) {
+                    const rm = document.createElement('button');
+                    rm.textContent = '×';
+                    rm.className = 'text-gray-400 hover:text-red-600 px-1 flex-none text-lg leading-none';
+                    rm.onclick = (e) => { e.stopPropagation(); removeClsImage(i); };
+                    row.appendChild(rm);
+                }
+                clsList.appendChild(row);
+            });
+        }
+
+        // --- Hover / preview ---
+        function setClsHover(i) { t3.hoverIndex = i; applyClsColors(); updateClsPreviewDisplay(); }
+        function clearClsHover() {
+            if (t3.hoverIndex == null) return;
+            t3.hoverIndex = null; applyClsColors(); updateClsPreviewDisplay();
+        }
+        function setClsPreview(i) { t3.previewIndex = i; applyClsColors(); renderClsList(); updateClsPreviewDisplay(); }
+
+        function updateClsPreviewDisplay() {
+            // Default to the base image when nothing is hovered or selected.
+            const idx = t3.hoverIndex != null ? t3.hoverIndex
+                : (t3.previewIndex != null ? t3.previewIndex : 0);
+            if (!t3.images[idx]) {
+                clsPreviewImg.removeAttribute('src'); clsPreviewLabel.textContent = ''; return;
+            }
+            const im = t3.images[idx];
+            clsPreviewImg.src = im.url;
+            clsPreviewLabel.textContent = idx === 0 ? 'Base (reference)' : `${im.name} · sim ${(im.sim * 100).toFixed(1)}%`;
+        }
+
+        // --- Controls ---
+        function setClsSortMode(mode) {
+            t3.sortMode = mode;
+            const upload = mode === 'upload';
+            clsSortUpload.classList.toggle('bg-blue-600', upload);
+            clsSortUpload.classList.toggle('text-white', upload);
+            clsSortUpload.classList.toggle('bg-white', !upload);
+            clsSortUpload.classList.toggle('text-gray-600', !upload);
+            clsSortSim.classList.toggle('bg-blue-600', !upload);
+            clsSortSim.classList.toggle('text-white', !upload);
+            clsSortSim.classList.toggle('bg-white', upload);
+            clsSortSim.classList.toggle('text-gray-600', upload);
+            renderClsList();
+        }
+
+        function setClsNeighborMode(mode) {
+            t3.neighborMode = mode;
+            const topk = mode === 'topk';
+            clsTopkControl.classList.toggle('hidden', !topk);
+            clsThresholdControl.classList.toggle('hidden', topk);
+            clsModeTopKBtn.classList.toggle('bg-blue-600', topk);
+            clsModeTopKBtn.classList.toggle('text-white', topk);
+            clsModeTopKBtn.classList.toggle('bg-white', !topk);
+            clsModeTopKBtn.classList.toggle('text-gray-600', !topk);
+            clsModeThresholdBtn.classList.toggle('bg-blue-600', !topk);
+            clsModeThresholdBtn.classList.toggle('text-white', !topk);
+            clsModeThresholdBtn.classList.toggle('bg-white', topk);
+            clsModeThresholdBtn.classList.toggle('text-gray-600', topk);
+            computeClsNeighbors();
+            applyClsColors();
+            renderClsList();
+        }
+
+        function toggleClsGrayNonMatch() {
+            t3.grayNonMatch = !t3.grayNonMatch;
+            clsGrayBtn.textContent = 'Gray non-match: ' + (t3.grayNonMatch ? 'On' : 'Off');
+            clsGrayBtn.classList.toggle('bg-blue-600', t3.grayNonMatch);
+            clsGrayBtn.classList.toggle('text-white', t3.grayNonMatch);
+            clsGrayBtn.classList.toggle('bg-white', !t3.grayNonMatch);
+            clsGrayBtn.classList.toggle('text-gray-600', !t3.grayNonMatch);
+            applyClsColors();
+        }
+
+        function resetClsView() {
+            t3.hoverIndex = null;
+            t3.previewIndex = null;
+            applyClsColors();
+            renderClsList();
+            updateClsPreviewDisplay();
+            if (t3.three) {
+                t3.three.camera.position.set(0, 0, 24);
+                t3.three.controls.target.set(0, 0, 0);
+                t3.three.camera.lookAt(0, 0, 0);
+                t3.three.controls.update();
+            }
+        }
+
+        function attachClsListeners() {
+            clsTopkSlider.addEventListener('input', () => {
+                t3.k = parseInt(clsTopkSlider.value, 10);
+                clsTopkVal.textContent = t3.k;
+                if (t3.neighborMode === 'topk') { computeClsNeighbors(); applyClsColors(); renderClsList(); }
+            });
+            clsThresholdSlider.addEventListener('input', () => {
+                t3.threshold = parseFloat(clsThresholdSlider.value);
+                clsThresholdVal.textContent = t3.threshold.toFixed(2);
+                if (t3.neighborMode === 'threshold') { computeClsNeighbors(); applyClsColors(); renderClsList(); }
+            });
+            clsFadeSlider.addEventListener('input', () => {
+                t3.fadeOpacity = parseFloat(clsFadeSlider.value);
+                clsFadeVal.textContent = t3.fadeOpacity.toFixed(2);
+                applyClsColors();
+            });
+            clsPointSizeSlider.addEventListener('input', () => {
+                t3.pointSizeScale = parseFloat(clsPointSizeSlider.value);
+                clsPointSizeVal.textContent = t3.pointSizeScale.toFixed(1) + '×';
+                applyClsPointSize();
+            });
+
+            clsDropzone.addEventListener('click', () => clsFileInput.click());
+            clsDropzone.addEventListener('dragover', (e) => {
+                e.preventDefault(); clsDropzone.classList.add('bg-blue-50', 'border-blue-400');
+            });
+            clsDropzone.addEventListener('dragleave', (e) => {
+                e.preventDefault(); clsDropzone.classList.remove('bg-blue-50', 'border-blue-400');
+            });
+            clsDropzone.addEventListener('drop', (e) => {
+                e.preventDefault(); clsDropzone.classList.remove('bg-blue-50', 'border-blue-400');
+                if (e.dataTransfer.files && e.dataTransfer.files.length) uploadClsImages(e.dataTransfer.files);
+            });
+        }
+
+        // --- 3D scatter (self-contained for the CLS tab) ---
+        function buildThreeCls() {
+            const coords = t3.coords;
+            const n = t3.images.length;
+            if (!coords || n === 0) return;
+
+            const min = [Infinity, Infinity, Infinity];
+            const max = [-Infinity, -Infinity, -Infinity];
+            for (let i = 0; i < n; i++) {
+                for (let c = 0; c < 3; c++) {
+                    const v = coords[i * 3 + c];
+                    if (v < min[c]) min[c] = v;
+                    if (v > max[c]) max[c] = v;
+                }
+            }
+            const center = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
+            const maxRange = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2]) || 1;
+            const scale = 16 / maxRange;
+
+            const positions = new Float32Array(n * 3);
+            const colors = new Float32Array(n * 4);
+            const neutral = [0.55, 0.68, 0.85];
+            for (let i = 0; i < n; i++) {
+                for (let c = 0; c < 3; c++) {
+                    positions[i * 3 + c] = (coords[i * 3 + c] - center[c]) * scale;
+                    colors[i * 4 + c] = neutral[c];
+                }
+                colors[i * 4 + 3] = 1.0;
+            }
+
+            if (t3.three) {
+                if (t3.three.resizeObserver) t3.three.resizeObserver.disconnect();
+                t3.three.renderer.dispose();
+                if (t3.three.renderer.domElement.parentNode === threeContainerCls) {
+                    threeContainerCls.removeChild(t3.three.renderer.domElement);
+                }
+            }
+
+            const width = threeContainerCls.clientWidth || 400;
+            const height = threeContainerCls.clientHeight || 400;
+
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x111827);
+
+            const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
+            camera.position.set(0, 0, 24);
+
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio || 1);
+            renderer.setSize(width, height);
+            threeContainerCls.appendChild(renderer.domElement);
+
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.1;
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 4));
+
+            const pointSize = 0.5;  // fixed base size (few points, coords fit ~[-8,8])
+            const material = new THREE.PointsMaterial({
+                size: pointSize * t3.pointSizeScale, vertexColors: true, sizeAttenuation: true,
+                transparent: false, depthWrite: true
+            });
+            const points = new THREE.Points(geometry, material);
+            scene.add(points);
+
+            const baseColors = colors.slice();
+
+            const raycaster = new THREE.Raycaster();
+            raycaster.params.Points.threshold = pointSize * t3.pointSizeScale * 1.3;
+            const mouse = new THREE.Vector2();
+
+            function pick3DCls(e) {
+                const rect = renderer.domElement.getBoundingClientRect();
+                mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+                const hits = raycaster.intersectObject(points);
+                if (hits.length === 0) return null;
+                let best = hits[0];
+                for (const h of hits) if (h.distanceToRay < best.distanceToRay) best = h;
+                return best.index;
+            }
+
+            let interacting = false;
+            controls.addEventListener('start', () => { interacting = true; });
+            controls.addEventListener('end', () => { interacting = false; });
+
+            // Hover always enabled (used for previewing); only suppressed while dragging.
+            renderer.domElement.addEventListener('pointermove', (e) => {
+                if (interacting || e.buttons !== 0) {
+                    renderer.domElement.style.cursor = 'grab';
+                    return;
+                }
+                const idx = pick3DCls(e);
+                if (idx != null) {
+                    renderer.domElement.style.cursor = 'pointer';
+                    if (idx !== t3.hoverIndex) setClsHover(idx);
+                } else {
+                    renderer.domElement.style.cursor = 'grab';
+                    clearClsHover();
+                }
+            });
+
+            // Click (not drag) previews the image — does NOT change the reference.
+            let downX = 0, downY = 0, downBtn = -1;
+            renderer.domElement.addEventListener('pointerdown', (e) => {
+                downX = e.clientX; downY = e.clientY; downBtn = e.button;
+            });
+            renderer.domElement.addEventListener('pointerup', (e) => {
+                if (e.button !== 0 || downBtn !== 0) return;
+                if (Math.hypot(e.clientX - downX, e.clientY - downY) > 5) return;
+                const idx = pick3DCls(e);
+                if (idx != null) setClsPreview(idx);
+            });
+
+            const resizeObserver = new ResizeObserver(() => resizeThreeCls());
+            resizeObserver.observe(threeContainerCls);
+
+            t3.three = {
+                scene, camera, renderer, controls, points, positions, material, raycaster,
+                colorAttr: geometry.getAttribute('color'), baseColors, pointSize, resizeObserver
+            };
+
+            applyClsColors();
+
+            if (!clsThreeAnimating) { clsThreeAnimating = true; animateThreeCls(); }
+        }
+
+        function animateThreeCls() {
+            requestAnimationFrame(animateThreeCls);
+            if (!t3.three) return;
+            t3.three.controls.update();
+            t3.three.renderer.render(t3.three.scene, t3.three.camera);
+        }
+
+        function resizeThreeCls() {
+            if (!t3.three) return;
+            const width = threeContainerCls.clientWidth;
+            const height = threeContainerCls.clientHeight;
+            if (!width || !height) return;
+            t3.three.camera.aspect = width / height;
+            t3.three.camera.updateProjectionMatrix();
+            t3.three.renderer.setSize(width, height);
+        }
+
+        // Base image (index 0) is always the fixed reference (red). Neighbors gold,
+        // hovered cyan, clicked-preview orange; everything else neutral, subject to the
+        // non-match opacity + gray toggle.
+        function applyClsColors() {
+            if (!t3.three) return;
+            const attr = t3.three.colorAttr;
+            const arr = attr.array;
+            arr.set(t3.three.baseColors);
+            const n = arr.length / 4;
+            const a = t3.fadeOpacity;
+            for (let i = 0; i < n; i++) {
+                arr[i * 4 + 3] = a;
+                if (t3.grayNonMatch) { arr[i * 4] = 0.5; arr[i * 4 + 1] = 0.5; arr[i * 4 + 2] = 0.5; }
+            }
+            const setColor = (index, r, g, b) => {
+                if (index == null || index < 0 || index >= n) return;
+                arr[index * 4] = r; arr[index * 4 + 1] = g; arr[index * 4 + 2] = b;
+                arr[index * 4 + 3] = 1.0;
+            };
+            for (const nb of t3.neighbors) { const c = clsSimColor(nb.t); setColor(nb.index, c[0], c[1], c[2]); }
+            setColor(0, 1.0, 0.13, 0.13);                                          // base red
+            if (t3.previewIndex != null && t3.previewIndex !== 0) setColor(t3.previewIndex, 1.0, 0.5, 0.0); // orange
+            if (t3.hoverIndex != null && t3.hoverIndex !== 0) setColor(t3.hoverIndex, 0.0, 1.0, 1.0); // cyan
+            attr.needsUpdate = true;
+
+            const fading = t3.fadeOpacity < 0.99;
+            const mat = t3.three.material;
+            if (mat.transparent !== fading || mat.depthWrite !== !fading) {
+                mat.transparent = fading;
+                mat.depthWrite = !fading;
+                mat.needsUpdate = true;
+            }
+        }
+
+        function applyClsPointSize() {
+            if (!t3.three) return;
+            const size = t3.three.pointSize * t3.pointSizeScale;
+            t3.three.material.size = size;
+            t3.three.raycaster.params.Points.threshold = size * 1.3;
         }
     </script>
 </body>

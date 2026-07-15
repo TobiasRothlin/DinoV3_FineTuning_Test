@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DINOv3 Interactive Web UI</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .tab-active {
+            border-bottom: 2px solid #3b82f6;
+            color: #3b82f6;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans text-gray-800 flex flex-col">
+
+    <!-- Header Section -->
+    <header class="bg-white shadow px-6 py-4 flex justify-between items-center">
+        <h1 class="text-2xl font-bold text-gray-900">DINOv3 Dashboard</h1>
+        <div>
+            <input type="file" id="headerImageInput" accept="image/*" class="hidden" onchange="handleFileSelect(this.files)">
+            <label for="headerImageInput" class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow transition">
+                Upload Image
+            </label>
+        </div>
+    </header>
+
+    <main class="flex-grow p-6 max-w-7xl mx-auto w-full flex flex-col gap-6">
+
+        <!-- Drag & Drop Zone -->
+        <div id="dropzone" class="w-full border-2 border-dashed border-gray-300 rounded-lg p-10 bg-white text-center hover:bg-gray-50 transition cursor-pointer flex flex-col items-center justify-center min-h-[150px]">
+            <svg class="w-12 h-12 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+            <p class="text-gray-600 font-medium text-lg">Drag & Drop an image here</p>
+            <p class="text-gray-400 text-sm mt-1">or click to browse files</p>
+        </div>
+
+        <!-- Status Log -->
+        <div id="statusAlert" class="hidden w-full bg-blue-50 border-l-4 border-blue-500 p-4 text-blue-700 rounded shadow-sm font-mono text-sm whitespace-pre-wrap"></div>
+
+        <!-- Tabs -->
+        <div class="border-b border-gray-200 mt-4">
+            <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                <button class="tab-active whitespace-nowrap py-4 px-1 font-medium text-sm transition">
+                    Patch Similarity
+                </button>
+                <button class="whitespace-nowrap py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium text-sm transition cursor-not-allowed opacity-50" title="Coming Soon">
+                    Attention Maps (Soon)
+                </button>
+            </nav>
+        </div>
+
+        <!-- Tab Content: Patch Similarity -->
+        <div id="tabPatchSimilarity" class="flex flex-col gap-4 hidden">
+
+            <div class="flex justify-between items-end">
+                <h2 class="text-xl font-semibold">Interactive Similarity Analysis</h2>
+                <button id="resetBtn" onclick="resetSelection()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded transition text-sm shadow-sm hidden">
+                    Reset Selection
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white p-6 rounded-lg shadow">
+                <!-- Left: Source Image + Grid Overlay -->
+                <div class="flex flex-col items-center w-full">
+                    <p class="mb-2 font-medium text-gray-700">Source Image & Grid</p>
+                    <div class="relative w-full max-w-full overflow-hidden border border-gray-300 rounded bg-gray-100 flex justify-center" id="imageContainer">
+                        <!-- Hidden underlying image to maintain aspect ratio/rendering -->
+                        <img id="sourceImage" class="absolute top-0 left-0 w-full h-full object-contain pointer-events-none opacity-0" />
+                        <!-- Canvas for drawing the image, grid, and hover box -->
+                        <canvas id="leftCanvas" class="absolute top-0 left-0 w-full h-full cursor-crosshair"></canvas>
+                    </div>
+                    <p id="leftCoords" class="text-xs text-gray-500 mt-2 h-4"></p>
+                </div>
+
+                <!-- Right: Heatmap -->
+                <div class="flex flex-col items-center w-full">
+                    <div class="mb-2 flex items-center gap-3">
+                        <p class="font-medium text-gray-700">Cosine Similarity Map</p>
+                        <button id="smoothingBtn" onclick="toggleSmoothing()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded shadow-sm transition text-xs">
+                            Smoothing: On
+                        </button>
+                    </div>
+                    <div class="relative w-full max-w-full overflow-hidden border border-gray-300 rounded bg-gray-100 flex justify-center" id="rightImageContainer">
+                        <canvas id="rightCanvas" class="absolute top-0 left-0 w-full h-full"></canvas>
+                    </div>
+                    <div class="w-full flex justify-between px-4 mt-2 text-xs text-gray-500">
+                        <span>Low (0.0)</span>
+                        <div class="h-2 w-full mx-4 rounded" style="background: linear-gradient(to right, blue, cyan, lime, yellow, red);"></div>
+                        <span>High (1.0)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // --- GLOBAL STATE ---
+        let currentData = {
+            embeddings: null,
+            dim: 0,
+            wFeat: 0,
+            hFeat: 0,
+            origWidth: 0,
+            origHeight: 0,
+            imageObj: null
+        };
+
+        let interactionState = {
+            selectedPatch: null,
+            hoveredPatch: null
+        };
+
+        let smoothingEnabled = true;
+        let lastRenderedPatch = null;
+
+        // --- DOM ELEMENTS ---
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('headerImageInput');
+        const statusAlert = document.getElementById('statusAlert');
+        const tabContent = document.getElementById('tabPatchSimilarity');
+        const sourceImage = document.getElementById('sourceImage');
+        const imageContainer = document.getElementById('imageContainer');
+        const rightImageContainer = document.getElementById('rightImageContainer');
+        const leftCanvas = document.getElementById('leftCanvas');
+        const rightCanvas = document.getElementById('rightCanvas');
+        const leftCtx = leftCanvas.getContext('2d');
+        const rightCtx = rightCanvas.getContext('2d', { willReadFrequently: true });
+        const resetBtn = document.getElementById('resetBtn');
+        const leftCoords = document.getElementById('leftCoords');
+        const smoothingBtn = document.getElementById('smoothingBtn');
+
+        const offscreenCanvas = document.createElement('canvas');
+        const offscreenCtx = offscreenCanvas.getContext('2d');
+
+        const hiResCanvas = document.createElement('canvas');
+        const hiResCtx = hiResCanvas.getContext('2d');
+
+        // --- DRAG & DROP LOGIC ---
+        dropzone.addEventListener('click', () => fileInput.click());
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('bg-blue-50', 'border-blue-400');
+        });
+        dropzone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('bg-blue-50', 'border-blue-400');
+        });
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('bg-blue-50', 'border-blue-400');
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                handleFileSelect(e.dataTransfer.files);
+            }
+        });
+
+        // --- FILE PROCESSING ---
+        function handleFileSelect(files) {
+            if (!files || files.length === 0) return;
+            const file = files[0];
+
+            const url = URL.createObjectURL(file);
+            sourceImage.src = url;
+            currentData.imageObj = new Image();
+            currentData.imageObj.src = url;
+
+            currentData.imageObj.onload = () => {
+                tabContent.classList.remove('hidden');
+
+                // Dynamically enforce original aspect ratio on both canvases
+                const aspectRatio = `${currentData.imageObj.width} / ${currentData.imageObj.height}`;
+                imageContainer.style.aspectRatio = aspectRatio;
+                rightImageContainer.style.aspectRatio = aspectRatio;
+
+                processImageBackend(file);
+            };
+        }
+
+        async function processImageBackend(file) {
+            updateStatus("Uploading and processing model... Please wait.");
+            resetSelection();
+
+            const formData = new FormData();
+            formData.append("file", file);
+
+            try {
+                const response = await fetch('/api/process-image', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error("Server processing failed");
+
+                const data = await response.json();
+
+                const patchEmbeddings = decodeFloat32Array(data.patch_embeddings_b64);
+
+                currentData.embeddings = patchEmbeddings;
+                currentData.dim = data.embedding_dim;
+                currentData.wFeat = data.grid_shape.w_feat;
+                currentData.hFeat = data.grid_shape.h_feat;
+                currentData.origWidth = data.original_size.width;
+                currentData.origHeight = data.original_size.height;
+
+                setupCanvases();
+
+                updateStatus(`Success! Embeddings loaded.\nGrid: ${currentData.wFeat}x${currentData.hFeat} | Dims: ${currentData.dim}`);
+
+                drawLeftCanvas();
+                clearRightCanvas();
+
+            } catch (error) {
+                updateStatus(`Error: ${error.message}`, true);
+            }
+        }
+
+        // --- CANVAS SETUP & DRAWING ---
+        function setupCanvases() {
+            leftCanvas.width = currentData.origWidth;
+            leftCanvas.height = currentData.origHeight;
+            rightCanvas.width = currentData.origWidth;
+            rightCanvas.height = currentData.origHeight;
+
+            offscreenCanvas.width = currentData.wFeat;
+            offscreenCanvas.height = currentData.hFeat;
+        }
+
+        function drawLeftCanvas() {
+            if (!currentData.imageObj) return;
+
+            leftCtx.clearRect(0, 0, leftCanvas.width, leftCanvas.height);
+            leftCtx.drawImage(currentData.imageObj, 0, 0, leftCanvas.width, leftCanvas.height);
+
+            leftCtx.fillStyle = 'rgba(200, 200, 200, 0.3)';
+            leftCtx.fillRect(0, 0, leftCanvas.width, leftCanvas.height);
+
+            leftCtx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            leftCtx.lineWidth = 1;
+
+            const patchW = leftCanvas.width / currentData.wFeat;
+            const patchH = leftCanvas.height / currentData.hFeat;
+
+            leftCtx.beginPath();
+            for (let i = 1; i < currentData.wFeat; i++) {
+                leftCtx.moveTo(i * patchW, 0);
+                leftCtx.lineTo(i * patchW, leftCanvas.height);
+            }
+            for (let i = 1; i < currentData.hFeat; i++) {
+                leftCtx.moveTo(0, i * patchH);
+                leftCtx.lineTo(leftCanvas.width, i * patchH);
+            }
+            leftCtx.stroke();
+
+            const activePatch = interactionState.selectedPatch || interactionState.hoveredPatch;
+            if (activePatch) {
+                leftCtx.clearRect(activePatch.x * patchW, activePatch.y * patchH, patchW, patchH);
+                leftCtx.drawImage(
+                    currentData.imageObj,
+                    activePatch.x * patchW, activePatch.y * patchH, patchW, patchH,
+                    activePatch.x * patchW, activePatch.y * patchH, patchW, patchH
+                );
+
+                leftCtx.strokeStyle = 'red';
+                leftCtx.lineWidth = Math.max(2, leftCanvas.width * 0.005);
+                leftCtx.strokeRect(activePatch.x * patchW, activePatch.y * patchH, patchW, patchH);
+            }
+        }
+
+        // --- MATH & HEATMAP ---
+        function toggleSmoothing() {
+            smoothingEnabled = !smoothingEnabled;
+            smoothingBtn.textContent = `Smoothing: ${smoothingEnabled ? 'On' : 'Off'}`;
+            smoothingBtn.classList.toggle('bg-blue-600', smoothingEnabled);
+            smoothingBtn.classList.toggle('hover:bg-blue-700', smoothingEnabled);
+            smoothingBtn.classList.toggle('bg-gray-400', !smoothingEnabled);
+            smoothingBtn.classList.toggle('hover:bg-gray-500', !smoothingEnabled);
+
+            if (lastRenderedPatch) {
+                computeAndRenderSimilarity(lastRenderedPatch.x, lastRenderedPatch.y);
+            }
+        }
+
+        function computeAndRenderSimilarity(targetX, targetY) {
+            if (!currentData.embeddings) return;
+
+            lastRenderedPatch = { x: targetX, y: targetY };
+
+            const w = currentData.wFeat;
+            const h = currentData.hFeat;
+            const dim = currentData.dim;
+            const embs = currentData.embeddings;
+
+            const queryIndexOffset = (targetY * w + targetX) * dim;
+            const queryEmb = embs.subarray(queryIndexOffset, queryIndexOffset + dim);
+
+            // 1. Compute the raw scalar similarity grid (one value per patch).
+            const simGrid = new Float32Array(w * h);
+            for (let i = 0; i < w * h; i++) {
+                let dotProduct = 0;
+                const offset = i * dim;
+                for (let d = 0; d < dim; d++) {
+                    dotProduct += queryEmb[d] * embs[offset + d];
+                }
+                simGrid[i] = Math.max(0, dotProduct);
+            }
+
+            // 2. Draw the base image dimmed underneath.
+            rightCtx.clearRect(0, 0, rightCanvas.width, rightCanvas.height);
+            rightCtx.globalAlpha = 0.5;
+            rightCtx.drawImage(currentData.imageObj, 0, 0, rightCanvas.width, rightCanvas.height);
+            rightCtx.globalAlpha = 1.0;
+
+            if (smoothingEnabled) {
+                // Value-space interpolation: bilinearly upsample the scalar grid,
+                // THEN colormap each pixel (matches matplotlib's F.interpolate + cmap).
+                const UF = 8;
+                const OW = w * UF;
+                const OH = h * UF;
+                hiResCanvas.width = OW;
+                hiResCanvas.height = OH;
+
+                const imgData = hiResCtx.createImageData(OW, OH);
+                const data = imgData.data;
+
+                for (let oy = 0; oy < OH; oy++) {
+                    // align_corners=False mapping to source grid coordinates.
+                    let sy = (oy + 0.5) * h / OH - 0.5;
+                    sy = Math.max(0, Math.min(sy, h - 1));
+                    const y0 = Math.floor(sy);
+                    const y1 = Math.min(y0 + 1, h - 1);
+                    const fy = sy - y0;
+
+                    for (let ox = 0; ox < OW; ox++) {
+                        let sx = (ox + 0.5) * w / OW - 0.5;
+                        sx = Math.max(0, Math.min(sx, w - 1));
+                        const x0 = Math.floor(sx);
+                        const x1 = Math.min(x0 + 1, w - 1);
+                        const fx = sx - x0;
+
+                        const v00 = simGrid[y0 * w + x0];
+                        const v01 = simGrid[y0 * w + x1];
+                        const v10 = simGrid[y1 * w + x0];
+                        const v11 = simGrid[y1 * w + x1];
+
+                        const top = v00 + (v01 - v00) * fx;
+                        const bottom = v10 + (v11 - v10) * fx;
+                        const val = top + (bottom - top) * fy;
+
+                        const rgb = jetColormap(val);
+                        const pxIndex = (oy * OW + ox) * 4;
+                        data[pxIndex] = rgb[0];
+                        data[pxIndex + 1] = rgb[1];
+                        data[pxIndex + 2] = rgb[2];
+                        data[pxIndex + 3] = 200;
+                    }
+                }
+
+                hiResCtx.putImageData(imgData, 0, 0);
+                rightCtx.imageSmoothingEnabled = true;
+                rightCtx.drawImage(hiResCanvas, 0, 0, rightCanvas.width, rightCanvas.height);
+            } else {
+                // Nearest-neighbor: colormap per patch, draw as crisp blocks.
+                const imgData = offscreenCtx.createImageData(w, h);
+                const data = imgData.data;
+                for (let i = 0; i < w * h; i++) {
+                    const rgb = jetColormap(simGrid[i]);
+                    const pxIndex = i * 4;
+                    data[pxIndex] = rgb[0];
+                    data[pxIndex + 1] = rgb[1];
+                    data[pxIndex + 2] = rgb[2];
+                    data[pxIndex + 3] = 200;
+                }
+                offscreenCtx.putImageData(imgData, 0, 0);
+                rightCtx.imageSmoothingEnabled = false;
+                rightCtx.drawImage(offscreenCanvas, 0, 0, rightCanvas.width, rightCanvas.height);
+            }
+        }
+
+        function clearRightCanvas() {
+            lastRenderedPatch = null;
+            rightCtx.clearRect(0, 0, rightCanvas.width, rightCanvas.height);
+            if (currentData.imageObj) {
+                rightCtx.globalAlpha = 0.2;
+                rightCtx.drawImage(currentData.imageObj, 0, 0, rightCanvas.width, rightCanvas.height);
+                rightCtx.globalAlpha = 1.0;
+            }
+        }
+
+        // --- INTERACTION HANDLERS ---
+        function getGridCoords(e) {
+            const rect = leftCanvas.getBoundingClientRect();
+            const scaleX = leftCanvas.width / rect.width;
+            const scaleY = leftCanvas.height / rect.height;
+
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
+
+            const patchW = leftCanvas.width / currentData.wFeat;
+            const patchH = leftCanvas.height / currentData.hFeat;
+
+            let featX = Math.floor(x / patchW);
+            let featY = Math.floor(y / patchH);
+
+            featX = Math.max(0, Math.min(featX, currentData.wFeat - 1));
+            featY = Math.max(0, Math.min(featY, currentData.hFeat - 1));
+
+            return { x: featX, y: featY };
+        }
+
+        leftCanvas.addEventListener('mousemove', (e) => {
+            if (!currentData.embeddings || interactionState.selectedPatch) return;
+
+            const coords = getGridCoords(e);
+
+            if (!interactionState.hoveredPatch ||
+                interactionState.hoveredPatch.x !== coords.x ||
+                interactionState.hoveredPatch.y !== coords.y) {
+
+                interactionState.hoveredPatch = coords;
+                leftCoords.textContent = `Hovering Patch: (${coords.x}, ${coords.y})`;
+
+                drawLeftCanvas();
+                computeAndRenderSimilarity(coords.x, coords.y);
+            }
+        });
+
+        leftCanvas.addEventListener('mouseleave', () => {
+            if (interactionState.selectedPatch) return;
+            interactionState.hoveredPatch = null;
+            leftCoords.textContent = '';
+            drawLeftCanvas();
+            clearRightCanvas();
+        });
+
+        leftCanvas.addEventListener('click', (e) => {
+            if (!currentData.embeddings) return;
+
+            const coords = getGridCoords(e);
+            interactionState.selectedPatch = coords;
+            interactionState.hoveredPatch = null;
+
+            leftCoords.textContent = `Locked Patch: (${coords.x}, ${coords.y})`;
+            resetBtn.classList.remove('hidden');
+
+            drawLeftCanvas();
+            computeAndRenderSimilarity(coords.x, coords.y);
+        });
+
+        function resetSelection() {
+            interactionState.selectedPatch = null;
+            interactionState.hoveredPatch = null;
+            resetBtn.classList.add('hidden');
+            leftCoords.textContent = '';
+
+            if (currentData.embeddings) {
+                drawLeftCanvas();
+                clearRightCanvas();
+            }
+        }
+
+        // --- UTILS ---
+        function decodeFloat32Array(base64Str) {
+            const binaryString = window.atob(base64Str);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return new Float32Array(bytes.buffer);
+        }
+
+        function updateStatus(msg, isError = false) {
+            statusAlert.textContent = msg;
+            statusAlert.classList.remove('hidden');
+            if (isError) {
+                statusAlert.classList.replace('bg-blue-50', 'bg-red-50');
+                statusAlert.classList.replace('border-blue-500', 'border-red-500');
+                statusAlert.classList.replace('text-blue-700', 'text-red-700');
+            } else {
+                statusAlert.classList.replace('bg-red-50', 'bg-blue-50');
+                statusAlert.classList.replace('border-red-500', 'border-blue-500');
+                statusAlert.classList.replace('text-red-700', 'text-blue-700');
+            }
+        }
+
+        function jetColormap(v) {
+            let r = 0, g = 0, b = 0;
+            if (v < 0.125) {
+                r = 0; g = 0; b = 0.5 + 4 * v;
+            } else if (v < 0.375) {
+                r = 0; g = 4 * (v - 0.125); b = 1;
+            } else if (v < 0.625) {
+                r = 4 * (v - 0.375); g = 1; b = 1 - 4 * (v - 0.375);
+            } else if (v < 0.875) {
+                r = 1; g = 1 - 4 * (v - 0.625); b = 0;
+            } else {
+                r = Math.max(0, 1 - 4 * (v - 0.875)); g = 0; b = 0;
+            }
+            return [Math.floor(r * 255), Math.floor(g * 255), Math.floor(b * 255)];
+        }
+    </script>
+</body>
+</html>

@@ -3446,13 +3446,21 @@
                     const t = (vec[i] - vmin) / range;
                     const c = jetColormap(Math.max(0, Math.min(1, t)));
                     const row = document.createElement('div');
-                    row.className = 'flex items-center font-mono';
-                    row.style.background = `rgb(${c[0]},${c[1]},${c[2]})`;
-                    row.style.color = (c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114) > 140 ? '#000' : '#fff';
-                    row.style.width = '150px';
-                    row.style.height = '16px';
-                    row.style.fontSize = '10px';
-                    row.innerHTML = `<span style="width:34px;text-align:right;padding-right:4px;opacity:.75">${i}</span><span>${vec[i].toFixed(4)}</span>`;
+                    row.className = 'flex items-center gap-2 font-mono';
+                    const idx = document.createElement('span');
+                    idx.textContent = i;
+                    idx.style.cssText = 'width:34px;text-align:right;color:#9ca3af;font-size:10px;flex:none;';
+                    const box = document.createElement('div');
+                    box.className = 'flex items-center';
+                    box.style.background = `rgb(${c[0]},${c[1]},${c[2]})`;
+                    box.style.color = (c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114) > 140 ? '#000' : '#fff';
+                    box.style.width = '120px';
+                    box.style.height = '16px';
+                    box.style.fontSize = '10px';
+                    box.style.paddingLeft = '6px';
+                    box.textContent = vec[i].toFixed(4);
+                    row.appendChild(idx);
+                    row.appendChild(box);
                     frag.appendChild(row);
                 }
                 vectorEl.appendChild(frag);

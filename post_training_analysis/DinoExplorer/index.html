@@ -172,6 +172,14 @@
             </div>
         </div>
 
+        <!-- Floating magnifier: enlarged patch + vector shown on hover. Fixed + pointer-events-none
+             so it floats on top and never affects the layout of the other components. -->
+        <div id="mioMag" class="hidden fixed z-40 pointer-events-none bg-white/95 backdrop-blur-sm border-2 border-red-500 rounded-lg shadow-2xl p-2 flex flex-col items-center gap-1">
+            <span id="mioMagLabel" class="text-[11px] font-semibold text-red-600"></span>
+            <canvas id="mioMagPatch" class="rounded" style="image-rendering: pixelated;"></canvas>
+            <canvas id="mioMagVec" class="rounded"></canvas>
+        </div>
+
         <!-- Tab Content: Patch Similarity -->
         <div id="tabPatchSimilarity" class="flex flex-col gap-4 hidden">
 
@@ -2839,6 +2847,7 @@
             ropeBase: document.createElement('canvas'),
             clsTiny: document.createElement('canvas'),
             imgScale: 1,
+            magVal: undefined,
             vecPer: 3, vecGap: 1
         };
 
@@ -3087,8 +3096,8 @@
                 const x = t5.emphasis % t5.w, y = Math.floor(t5.emphasis / t5.w);
                 const dx = x * (cell + gap), dy = y * (cell + gap);
                 [pctx, rctx].forEach(ctx => {
-                    ctx.strokeStyle = 'cyan';
-                    ctx.lineWidth = Math.max(1.5, cell * 0.25);
+                    ctx.strokeStyle = '#ef4444';
+                    ctx.lineWidth = Math.max(2, cell * 0.3);
                     ctx.strokeRect(dx + 0.5, dy + 0.5, cell, cell);
                 });
             }
@@ -3100,7 +3109,7 @@
             octx.clearRect(0, 0, mioVecOverlay.width, mioVecOverlay.height);
             if (typeof t5.emphasis === 'number') {
                 const yy = t5.emphasis * t5.vecPer;
-                octx.strokeStyle = 'cyan';
+                octx.strokeStyle = '#ef4444';
                 octx.lineWidth = 2;
                 octx.strokeRect(1, yy - 0.5, MIO_HM_W - 2, t5.vecRowH + 1);
             }
@@ -3110,7 +3119,7 @@
         function mioUpdateEmphasis() {
             if (!t5.built) return;
             mioDrawSmall();
-            mioClsCanvas.style.outline = (t5.emphasis === 'cls') ? '3px solid #06b6d4' : 'none';
+            mioClsCanvas.style.outline = (t5.emphasis === 'cls') ? '3px solid #ef4444' : 'none';
             mioDrawVecOverlay();
             mioColorArrows();
         }
@@ -3189,6 +3198,92 @@
             });
         }
 
+        // --- Floating magnifier (enlarged patch + vector on hover) ---
+        const MIO_MAG_PATCH = 120;   // enlarged patch size (px)
+        const MIO_MAG_VEC_W = 240;   // enlarged vector band width
+        const MIO_MAG_VEC_H = 48;    // enlarged vector band height
+
+        function mioDrawMagPatch(index, canvas) {
+            const S = MIO_MAG_PATCH;
+            canvas.width = S; canvas.height = S;
+            const ctx = canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = false;
+            const r = patchRect(index);
+            ctx.clearRect(0, 0, S, S);
+            ctx.drawImage(currentData.imageObj, r.sx, r.sy, r.sw, r.sh, 0, 0, S, S);
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(1.5, 1.5, S - 3, S - 3);
+        }
+
+        function mioDrawMagVec(vec, vmin, vmax, canvas) {
+            const W = MIO_MAG_VEC_W, H = MIO_MAG_VEC_H;
+            canvas.width = W; canvas.height = H;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, W, H);
+            if (!vec) return;
+            const dim = vec.length;
+            const img = ctx.createImageData(W, H);
+            const u32 = new Uint32Array(img.data.buffer);
+            const range = (vmax - vmin) || 1;
+            const scale = 255 / range;
+            const row = new Uint32Array(W);
+            for (let cx = 0; cx < W; cx++) {
+                const col = Math.min(dim - 1, (cx * dim / W) | 0);
+                let q = (vec[col] - vmin) * scale;
+                q = q < 0 ? 0 : (q > 255 ? 255 : q);
+                row[cx] = MIO_JET_U32[q | 0];
+            }
+            for (let y = 0; y < H; y++) u32.set(row, y * W);
+            ctx.putImageData(img, 0, 0);
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(1, 1, W - 2, H - 2);
+        }
+
+        function mioPositionMag(mag, cx, cy) {
+            const pad = 18;
+            const mw = mag.offsetWidth || 200, mh = mag.offsetHeight || 200;
+            let left = cx + pad, top = cy + pad;
+            if (left + mw > window.innerWidth - 6) left = cx - mw - pad;
+            if (top + mh > window.innerHeight - 6) top = cy - mh - pad;
+            if (left < 6) left = 6;
+            if (top < 6) top = 6;
+            mag.style.left = left + 'px';
+            mag.style.top = top + 'px';
+        }
+
+        function mioShowMag(val, cx, cy) {
+            if (!t5.built) return;
+            const mag = document.getElementById('mioMag');
+            if (val !== t5.magVal) {
+                t5.magVal = val;
+                const label = document.getElementById('mioMagLabel');
+                const pc = document.getElementById('mioMagPatch');
+                const vc = document.getElementById('mioMagVec');
+                if (val === 'cls') {
+                    label.textContent = 'CLS token';
+                    pc.style.display = 'none';
+                    mioDrawMagVec(currentData.clsVector, t5.clsMin, t5.clsMax, vc);
+                } else {
+                    const x = val % t5.w, y = Math.floor(val / t5.w);
+                    label.textContent = `Patch #${val}  (col ${x}, row ${y})`;
+                    pc.style.display = '';
+                    mioDrawMagPatch(val, pc);
+                    const base = val * t5.dim;
+                    mioDrawMagVec(currentData.embeddings.subarray(base, base + t5.dim), t5.vecMin, t5.vecMax, vc);
+                }
+                mag.classList.remove('hidden');
+            }
+            mioPositionMag(mag, cx, cy);
+        }
+
+        function mioHideMag() {
+            t5.magVal = undefined;
+            const mag = document.getElementById('mioMag');
+            if (mag) mag.classList.add('hidden');
+        }
+
         function mioSetEmphasis(val, scrollVec) {
             if (t5.emphasis === val) return;
             t5.emphasis = val;
@@ -3215,26 +3310,31 @@
             if (t5.listeners) return;
             t5.listeners = true;
 
-            const onPatchMove = (e) => { const i = mioPatchAt(e); if (i !== null) mioSetEmphasis(i, true); };
+            const onPatchMove = (e) => {
+                const i = mioPatchAt(e);
+                if (i !== null) { mioSetEmphasis(i, true); mioShowMag(i, e.clientX, e.clientY); }
+                else mioHideMag();
+            };
             mioPatchCanvas.addEventListener('mousemove', onPatchMove);
             mioRopeCanvas.addEventListener('mousemove', onPatchMove);
-            mioPatchCanvas.addEventListener('mouseleave', () => mioSetEmphasis(null));
-            mioRopeCanvas.addEventListener('mouseleave', () => mioSetEmphasis(null));
+            mioPatchCanvas.addEventListener('mouseleave', () => { mioSetEmphasis(null); mioHideMag(); });
+            mioRopeCanvas.addEventListener('mouseleave', () => { mioSetEmphasis(null); mioHideMag(); });
             mioPatchCanvas.addEventListener('click', (e) => { const i = mioPatchAt(e); if (i !== null) mioOpenModal('patch', i); });
             mioRopeCanvas.addEventListener('click', (e) => { const i = mioPatchAt(e); if (i !== null) mioOpenModal('patch', i); });
 
             mioVecCanvas.addEventListener('mousemove', (e) => {
                 const i = Math.floor(e.offsetY / t5.vecPer);
-                if (i >= 0 && i < t5.numPatches) mioSetEmphasis(i, false);
+                if (i >= 0 && i < t5.numPatches) { mioSetEmphasis(i, false); mioShowMag(i, e.clientX, e.clientY); }
             });
-            mioVecCanvas.addEventListener('mouseleave', () => mioSetEmphasis(null));
+            mioVecCanvas.addEventListener('mouseleave', () => { mioSetEmphasis(null); mioHideMag(); });
             mioVecCanvas.addEventListener('click', (e) => {
                 const i = Math.floor(e.offsetY / t5.vecPer);
                 if (i >= 0 && i < t5.numPatches) mioOpenModal('patch', i);
             });
 
             mioClsCanvas.addEventListener('mouseenter', () => mioSetEmphasis('cls'));
-            mioClsCanvas.addEventListener('mouseleave', () => mioSetEmphasis(null));
+            mioClsCanvas.addEventListener('mousemove', (e) => mioShowMag('cls', e.clientX, e.clientY));
+            mioClsCanvas.addEventListener('mouseleave', () => { mioSetEmphasis(null); mioHideMag(); });
             mioClsCanvas.addEventListener('click', () => mioOpenModal('cls', null));
 
             window.addEventListener('resize', () => { if (activeTab === 'tabModelIO' && t5.built) requestAnimationFrame(mioDrawArrows); });
@@ -3261,6 +3361,7 @@
 
         function mioOpenModal(kind, index) {
             if (!t5.built) return;
+            mioHideMag();
             const titleEl = document.getElementById('mioModalTitle');
             const pixelsEl = document.getElementById('mioModalPixels');
             const pixelNote = document.getElementById('mioModalPixelNote');

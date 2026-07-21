@@ -11,8 +11,8 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <style>
         .tab-active {
-            border-bottom: 2px solid #3b82f6;
-            color: #3b82f6;
+            border-bottom: 2px solid #3b82f6 !important;
+            color: #3b82f6 !important;
         }
     </style>
 </head>
@@ -44,7 +44,7 @@
         <!-- Tabs -->
         <div class="border-b border-gray-200 mt-4">
             <nav class="-mb-px flex space-x-8" aria-label="Tabs">
-                <button id="tabBtn0" onclick="showTab('tabModelIO')" class="tab-active whitespace-nowrap py-4 px-1 font-medium text-sm transition">
+                <button id="tabBtn0" onclick="showTab('tabModelIO')" class="tab-active whitespace-nowrap py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium text-sm transition">
                     Model Input &amp; Output
                 </button>
                 <button id="tabBtn1" onclick="showTab('tabPatchSimilarity')" class="whitespace-nowrap py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium text-sm transition">

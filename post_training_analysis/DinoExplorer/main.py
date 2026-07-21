@@ -19,7 +19,7 @@ TARGET_SIZE = (2304, 832)
 PATCH_SIZE = 16
 
 # NOTE: Update this to your local model path or HuggingFace ID[cite: 1]
-MODEL_PATH = r"C:\Users\TobiasRothlin\Downloads\dinov3-vitl16-finetuned-v1-SyntoGo\dinov3-vitl16-finetuned-v1-SyntoGo"
+MODEL_PATH = r"C:\Users\TobiasRothlin\Downloads\dinov3-vitl16-finetuned-v1-SyntoGo-49\dinov3-vitl16-finetuned-v1-SyntoGo-49"
 
 # Initialize device and model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -109,4 +109,5 @@ async def process_image(file: UploadFile = File(...)):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    print("Starting DINOv3 Backend on http://127.0.0.1:8081")
+    uvicorn.run(app, host="127.0.0.1", port=8081)

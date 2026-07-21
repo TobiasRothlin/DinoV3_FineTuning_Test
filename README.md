@@ -47,3 +47,12 @@ docker run --gpus all \
 Copy `Dockerfile` + `docker-compose.yml` into the new project, adjust its
 `requirements.txt` extras and the entrypoint command. The shared
 `dgx_hf_cache` volume dedupes model downloads across all projects.
+
+
+### Setup for Inference
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+pip install -r requirements.txt
+pip install -r requirements-base.txt
+```

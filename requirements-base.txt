@@ -6,3 +6,6 @@ torchinfo
 mlflow
 transformers
 huggingface_hub
+fastapi
+uvicorn
+python-multipart

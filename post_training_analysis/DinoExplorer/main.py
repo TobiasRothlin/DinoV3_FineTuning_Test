@@ -1,4 +1,5 @@
 import io
+import os
 import base64
 import torch
 import torch.nn.functional as F
@@ -20,6 +21,9 @@ PATCH_SIZE = 16
 
 # NOTE: Update this to your local model path or HuggingFace ID[cite: 1]
 MODEL_PATH = r"C:\Users\TobiasRothlin\Downloads\dinov3-vitl16-finetuned-v1-SyntoGo-49\dinov3-vitl16-finetuned-v1-SyntoGo-49"
+
+# Human-readable model name = final folder in the model path.
+MODEL_NAME = os.path.basename(MODEL_PATH.rstrip("\\/")) or MODEL_PATH
 
 # Initialize device and model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -62,6 +66,12 @@ def serve_frontend():
     return FileResponse("index.html")
 
 
+@app.get("/api/config")
+def get_config():
+    """Returns backend configuration used by the UI (e.g. loaded model name)."""
+    return {"model_name": MODEL_NAME}
+
+
 @app.post("/api/process-image")
 async def process_image(file: UploadFile = File(...)):
     """Processes an uploaded image and returns embeddings and dimensions."""
@@ -98,6 +108,7 @@ async def process_image(file: UploadFile = File(...)):
 
     # 4. Return as Base64 for rapid network transfer
     return {
+        "model_name": MODEL_NAME,
         "patch_size": PATCH_SIZE,
         "grid_shape": {"h_feat": h_feat, "w_feat": w_feat},
         "original_size": {"width": orig_w, "height": orig_h},

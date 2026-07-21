@@ -44,7 +44,10 @@
         <!-- Tabs -->
         <div class="border-b border-gray-200 mt-4">
             <nav class="-mb-px flex space-x-8" aria-label="Tabs">
-                <button id="tabBtn1" onclick="showTab('tabPatchSimilarity')" class="tab-active whitespace-nowrap py-4 px-1 font-medium text-sm transition">
+                <button id="tabBtn0" onclick="showTab('tabModelIO')" class="tab-active whitespace-nowrap py-4 px-1 font-medium text-sm transition">
+                    Model Input &amp; Output
+                </button>
+                <button id="tabBtn1" onclick="showTab('tabPatchSimilarity')" class="whitespace-nowrap py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium text-sm transition">
                     Patch Similarity
                 </button>
                 <button id="tabBtn2" onclick="showTab('tabEmbeddingSpace')" class="whitespace-nowrap py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium text-sm transition">
@@ -60,6 +63,113 @@
                     Attention Maps (Soon)
                 </button>
             </nav>
+        </div>
+
+        <!-- Tab Content: Model Input & Output (ViT explainer) -->
+        <div id="tabModelIO" class="flex flex-col gap-4">
+            <div class="flex justify-between items-end flex-wrap gap-2">
+                <div>
+                    <h2 class="text-xl font-semibold">Model Input &amp; Output</h2>
+                    <p class="text-sm text-gray-500">How the Vision Transformer turns an image into patch &amp; CLS embeddings. Hover to link a patch with its output vector; click to inspect.</p>
+                </div>
+                <div id="mioHint" class="text-sm text-gray-400">Upload an image to begin.</div>
+            </div>
+
+            <!-- Render progress bar (shown while the ViT views are being built) -->
+            <div id="mioProgressWrap" class="w-full hidden">
+                <div class="flex justify-between text-xs text-gray-500 mb-1">
+                    <span id="mioProgressLabel">Rendering…</span>
+                    <span id="mioProgressPct">0%</span>
+                </div>
+                <div class="w-full h-2 bg-gray-200 rounded overflow-hidden">
+                    <div id="mioProgressBar" class="h-full bg-blue-500" style="width:0%; transition: width 0.12s ease;"></div>
+                </div>
+            </div>
+
+            <!-- Scrollable flow diagram. The SVG overlay draws the connecting arrows on top. -->
+            <div id="mioScroll" class="relative w-full overflow-auto bg-white rounded-lg shadow p-6">
+                <div id="mioFlow" class="relative flex flex-row items-stretch gap-10 min-w-max" style="z-index:1;">
+                    <svg id="mioArrows" class="absolute top-0 left-0 pointer-events-none" style="z-index:5;"></svg>
+
+                    <!-- Column: input image -->
+                    <div class="flex items-center justify-center">
+                        <div class="flex flex-col items-center" id="mioBaseWrap">
+                            <span class="text-xs font-medium text-gray-600 mb-1">Input Image</span>
+                            <canvas id="mioBaseCanvas" class="border border-gray-300 rounded bg-gray-100"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Column: patches (top) + rotational encoding (below) -->
+                    <div class="flex flex-col gap-4 items-center justify-center">
+                        <div class="flex flex-col items-center" id="mioPatchWrap">
+                            <span class="text-xs font-medium text-gray-600 mb-1">Patches</span>
+                            <canvas id="mioPatchCanvas" class="cursor-crosshair"></canvas>
+                        </div>
+                        <div class="flex flex-col items-center" id="mioRopeWrap">
+                            <span class="text-xs font-medium text-gray-600 mb-1">Rotational Position Encoding (illustrative)</span>
+                            <canvas id="mioRopeCanvas" class="border border-gray-200 rounded"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Center: sum block -->
+                    <div class="flex flex-col items-center justify-center gap-2" id="mioSumWrap">
+                        <div id="mioSumBlock" class="w-16 h-16 rounded-full border-2 border-gray-400 bg-gray-50 flex items-center justify-center text-4xl text-gray-600 font-light shadow-sm">+</div>
+                        <span class="text-[11px] text-gray-500 text-center w-24">patch&nbsp;+&nbsp;position</span>
+                    </div>
+
+                    <!-- Center: encoder block -->
+                    <div class="flex flex-col items-center justify-center" id="mioEncWrap">
+                        <div id="mioEncBlock" class="w-40 min-h-[120px] rounded-lg border-2 border-blue-400 bg-blue-50 flex flex-col items-center justify-center text-center px-3 py-4 shadow">
+                            <span class="text-sm font-semibold text-blue-800">Vision Encoder</span>
+                            <span id="mioModelName" class="text-[11px] text-blue-600 mt-2 break-all">loading…</span>
+                        </div>
+                    </div>
+
+                    <!-- Right column: output vectors -->
+                    <div class="flex flex-col gap-3 justify-center" id="mioOutWrap">
+                        <div class="flex flex-col" id="mioClsWrap">
+                            <span class="text-xs font-medium text-gray-600 mb-1">CLS token</span>
+                            <canvas id="mioClsCanvas" class="border border-gray-400 rounded cursor-pointer"></canvas>
+                        </div>
+                        <div class="flex flex-col" id="mioPatchVecWrap">
+                            <span class="text-xs font-medium text-gray-600 mb-1">Patch embeddings <span id="mioVecCount" class="text-gray-400"></span></span>
+                            <div class="overflow-auto border border-gray-300 rounded" style="max-height:70vh;">
+                                <div id="mioVecInner" class="relative">
+                                    <canvas id="mioVecCanvas" class="cursor-pointer block"></canvas>
+                                    <canvas id="mioVecOverlay" class="absolute top-0 left-0 pointer-events-none"></canvas>
+                                </div>
+                            </div>
+                            <div class="w-full flex justify-between mt-1 text-[10px] text-gray-500">
+                                <span>Low</span>
+                                <div class="h-2 w-full mx-2 rounded" style="background: linear-gradient(to right, blue, cyan, lime, yellow, red);"></div>
+                                <span>High</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal overlay for inspecting a single patch/vector -->
+        <div id="mioModal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6" onclick="if(event.target===this)mioCloseModal()">
+            <div class="bg-white rounded-lg shadow-2xl max-w-[95vw] max-h-[92vh] overflow-auto p-6 flex flex-col gap-4">
+                <div class="flex justify-between items-center">
+                    <h3 id="mioModalTitle" class="text-lg font-semibold">Patch inspector</h3>
+                    <button onclick="mioCloseModal()" class="text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+                </div>
+                <div class="flex flex-row gap-8 items-start">
+                    <div class="flex flex-col items-center gap-2">
+                        <span class="text-sm font-medium text-gray-600">Patch pixels (RGB, 0–1)</span>
+                        <div id="mioModalPixels" class="grid gap-px bg-gray-300 border border-gray-300"></div>
+                        <span id="mioModalPixelNote" class="text-xs text-gray-400"></span>
+                    </div>
+                    <div class="flex flex-col items-center gap-2">
+                        <span class="text-sm font-medium text-gray-600">Embedding vector <span id="mioModalDim" class="text-gray-400"></span></span>
+                        <div id="mioModalVector" class="flex flex-col border border-gray-300 overflow-auto" style="max-height:78vh;"></div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Tab Content: Patch Similarity -->
@@ -426,7 +536,9 @@
         const hiResCtx = hiResCanvas.getContext('2d');
 
         // --- TAB 2 (Embedding Space) DOM + STATE ---
-        let activeTab = 'tabPatchSimilarity';
+        let activeTab = 'tabModelIO';
+        const tabBtn0 = document.getElementById('tabBtn0');
+        const tabModelIO = document.getElementById('tabModelIO');
         const tabBtn1 = document.getElementById('tabBtn1');
         const tabBtn2 = document.getElementById('tabBtn2');
         const tabPatchSimilarity = document.getElementById('tabPatchSimilarity');
@@ -531,14 +643,17 @@
 
         function showTab(tabId) {
             activeTab = tabId;
+            const isMio = tabId === 'tabModelIO';
             const isSim = tabId === 'tabPatchSimilarity';
             const isEmb = tabId === 'tabEmbeddingSpace';
             const isCls = tabId === 'tabClsSimilarity';
             const isPp = tabId === 'tabPatchPrototype';
+            tabModelIO.classList.toggle('hidden', !isMio);
             tabPatchSimilarity.classList.toggle('hidden', !isSim);
             tabEmbeddingSpace.classList.toggle('hidden', !isEmb);
             tabClsSimilarity.classList.toggle('hidden', !isCls);
             tabPatchPrototype.classList.toggle('hidden', !isPp);
+            tabBtn0.classList.toggle('tab-active', isMio);
             tabBtn1.classList.toggle('tab-active', isSim);
             tabBtn2.classList.toggle('tab-active', isEmb);
             tabBtn3.classList.toggle('tab-active', isCls);
@@ -548,6 +663,7 @@
             if (isEmb && t2.three) requestAnimationFrame(resizeThree);
             if (isCls && t3.three) requestAnimationFrame(resizeThreeCls);
             if (isPp) requestAnimationFrame(ppDrawCanvas);
+            if (isMio) requestAnimationFrame(mioRenderAll);
         }
 
         // --- DRAG & DROP LOGIC ---
@@ -613,6 +729,8 @@
 
                 currentData.embeddings = patchEmbeddings;
                 currentData.dim = data.embedding_dim;
+                currentData.patchSize = data.patch_size;
+                currentData.modelName = data.model_name || currentData.modelName;
                 currentData.wFeat = data.grid_shape.w_feat;
                 currentData.hFeat = data.grid_shape.h_feat;
                 currentData.origWidth = data.original_size.width;
@@ -628,12 +746,37 @@
                 drawLeftCanvas();
                 clearRightCanvas();
 
-                initTab2();
-                initTab3();
-                initTab4();
+                // Yield to the event loop so the "Success" status actually paints
+                // before the heavy per-tab initialization runs. Each init is isolated
+                // so a failure in one tab can never block the others or freeze the UI.
+                const yieldPaint = () => new Promise(r => setTimeout(r, 0));
+                mioProgress(8, 'Preparing views');
+                await yieldPaint();
+
+                const inits = [
+                    ['Tab2', initTab2, 12, 'Building 3D view'],
+                    ['Tab3', initTab3, 30, 'Building PCA view'],
+                    ['Tab4', initTab4, 42, 'Building similarity view'],
+                    ['Tab5', initTab5, 50, 'Building embedding heatmap']
+                ];
+                for (const [name, fn, pct, label] of inits) {
+                    mioProgress(pct, label);
+                    await yieldPaint();
+                    try {
+                        await fn();
+                    } catch (e) {
+                        console.error(`${name} init failed:`, e);
+                        updateStatus(`Loaded, but ${name} view failed: ${e.message}`, true);
+                    }
+                    await yieldPaint();
+                }
+                mioProgress(100, 'Done');
+                setTimeout(mioProgressDone, 500);
 
             } catch (error) {
+                console.error('processImageBackend failed:', error);
                 updateStatus(`Error: ${error.message}`, true);
+                mioProgressDone();
             }
         }
 
@@ -2672,6 +2815,515 @@
                 ppCtx.lineWidth = lw;
                 ppCtx.strokeRect(t4.hoverPatch.x * pw, t4.hoverPatch.y * ph, pw, ph);
             }
+        }
+
+        // ============================================================
+        // TAB 5 — MODEL INPUT & OUTPUT (ViT explainer)
+        // ============================================================
+        const MIO_MOSAIC_W = 240;   // target mosaic width in px
+        const MIO_HM_W = 460;       // heatmap display width in px
+        const MIO_CLS_H = 20;       // CLS heatmap display height
+        const MIO_VEC_MAX_H = 24000;// safe max canvas height for the vector stack
+
+        const t5 = {
+            built: false,
+            listeners: false,
+            w: 0, h: 0, dim: 0, numPatches: 0,
+            cell: 1, gap: 0,
+            vecRowH: 1,
+            vecMin: 0, vecMax: 1,
+            clsMin: 0, clsMax: 1,
+            emphasis: null,          // patch index, or 'cls', or null
+            imgData: null,           // full-res ImageData of the input image
+            mosaicBase: document.createElement('canvas'),
+            ropeBase: document.createElement('canvas'),
+            clsTiny: document.createElement('canvas'),
+            imgScale: 1,
+            vecPer: 3, vecGap: 1
+        };
+
+        const mioScroll = document.getElementById('mioScroll');
+        const mioFlow = document.getElementById('mioFlow');
+        const mioArrows = document.getElementById('mioArrows');
+        const mioHint = document.getElementById('mioHint');
+        const mioModelNameEl = document.getElementById('mioModelName');
+        const mioBaseCanvas = document.getElementById('mioBaseCanvas');
+        const mioPatchCanvas = document.getElementById('mioPatchCanvas');
+        const mioRopeCanvas = document.getElementById('mioRopeCanvas');
+        const mioClsCanvas = document.getElementById('mioClsCanvas');
+        const mioVecCanvas = document.getElementById('mioVecCanvas');
+        const mioVecOverlay = document.getElementById('mioVecOverlay');
+        const mioVecCount = document.getElementById('mioVecCount');
+        const mioModal = document.getElementById('mioModal');
+
+        // Yield to the event loop so progress paints between heavy chunks.
+        const mioYield = () => new Promise(r => setTimeout(r, 0));
+
+        // --- Progress bar helpers ---
+        function mioProgress(pct, label) {
+            const wrap = document.getElementById('mioProgressWrap');
+            if (!wrap) return;
+            wrap.classList.remove('hidden');
+            const p = Math.max(0, Math.min(100, Math.round(pct)));
+            document.getElementById('mioProgressBar').style.width = p + '%';
+            document.getElementById('mioProgressPct').textContent = p + '%';
+            if (label) document.getElementById('mioProgressLabel').textContent = label;
+        }
+        function mioProgressDone() {
+            const wrap = document.getElementById('mioProgressWrap');
+            if (wrap) wrap.classList.add('hidden');
+        }
+
+        // Fetch the loaded model name for the encoder block label (before any upload).
+        (function mioInitConfig() {
+            fetch('/api/config')
+                .then(r => r.ok ? r.json() : null)
+                .then(cfg => { if (cfg && cfg.model_name) mioModelNameEl.textContent = cfg.model_name; })
+                .catch(() => { mioModelNameEl.textContent = '(model)'; });
+        })();
+
+        async function initTab5() {
+            if (!currentData.embeddings) return;
+            if (currentData.modelName) mioModelNameEl.textContent = currentData.modelName;
+            await mioBuildBases((frac, label) => mioProgress(50 + frac * 48, label));
+            mioAttachListeners();
+            if (activeTab === 'tabModelIO') requestAnimationFrame(mioRenderAll);
+        }
+
+        // Precomputed jet palette (256 entries) packed as little-endian RGBA uint32.
+        // Filling ImageData via a uint32 view + LUT is ~50x faster than calling
+        // jetColormap() per pixel (critical for the large patch-embedding heatmap).
+        const MIO_JET_U32 = (function () {
+            const lut = new Uint32Array(256);
+            for (let i = 0; i < 256; i++) {
+                const c = jetColormap(i / 255);
+                lut[i] = (255 << 24) | (c[2] << 16) | (c[1] << 8) | c[0];
+            }
+            return lut;
+        })();
+
+        function mioGetImageData() {
+            // Cap the offscreen resolution — the modal only samples up to 16x16
+            // pixels per patch, so a full-res copy of a large upload is wasteful.
+            const MAX = 2048;
+            const ow = currentData.origWidth, oh = currentData.origHeight;
+            const scale = Math.min(1, MAX / Math.max(ow, oh));
+            const iw = Math.max(1, Math.round(ow * scale));
+            const ih = Math.max(1, Math.round(oh * scale));
+            const off = document.createElement('canvas');
+            off.width = iw;
+            off.height = ih;
+            const octx = off.getContext('2d', { willReadFrequently: true });
+            octx.drawImage(currentData.imageObj, 0, 0, iw, ih);
+            t5.imgScale = scale;
+            return octx.getImageData(0, 0, iw, ih);
+        }
+
+        async function mioBuildBases(report) {
+            if (typeof report !== 'function') report = () => {};
+            const w = currentData.wFeat, h = currentData.hFeat, dim = currentData.dim;
+            const numPatches = w * h;
+            t5.w = w; t5.h = h; t5.dim = dim; t5.numPatches = numPatches;
+            t5.emphasis = null;
+
+            report(0.0, 'Reading image');
+            t5.imgData = mioGetImageData();
+
+            // --- Mosaic geometry ---
+            const cell = Math.max(1, Math.floor(MIO_MOSAIC_W / w));
+            const gap = cell >= 4 ? 1 : 0;
+            t5.cell = cell; t5.gap = gap;
+            const mw = w * cell + (w - 1) * gap;
+            const mh = h * cell + (h - 1) * gap;
+
+            // --- Base image ---
+            const aspect = currentData.imageObj.width / currentData.imageObj.height || 1;
+            let bw = MIO_MOSAIC_W, bh = MIO_MOSAIC_W;
+            if (aspect >= 1) bh = Math.round(MIO_MOSAIC_W / aspect); else bw = Math.round(MIO_MOSAIC_W * aspect);
+            mioBaseCanvas.width = bw; mioBaseCanvas.height = bh;
+            mioBaseCanvas.getContext('2d').drawImage(currentData.imageObj, 0, 0, bw, bh);
+
+            // --- Patch mosaic base (offscreen), chunked ---
+            t5.mosaicBase.width = mw; t5.mosaicBase.height = mh;
+            const mctx = t5.mosaicBase.getContext('2d');
+            mctx.clearRect(0, 0, mw, mh);
+            const CHUNK = 2048;
+            for (let i0 = 0; i0 < numPatches; i0 += CHUNK) {
+                const i1 = Math.min(numPatches, i0 + CHUNK);
+                for (let idx = i0; idx < i1; idx++) {
+                    const r = patchRect(idx);
+                    const x = idx % w, y = Math.floor(idx / w);
+                    mctx.drawImage(currentData.imageObj, r.sx, r.sy, r.sw, r.sh,
+                        x * (cell + gap), y * (cell + gap), cell, cell);
+                }
+                report(0.05 + 0.30 * (i1 / numPatches), 'Building patches');
+                await mioYield();
+            }
+            mioPatchCanvas.width = mw; mioPatchCanvas.height = mh;
+
+            // --- Representative RoPE base (offscreen), aligned to the same grid, chunked ---
+            t5.ropeBase.width = mw; t5.ropeBase.height = mh;
+            const rctx = t5.ropeBase.getContext('2d');
+            rctx.clearRect(0, 0, mw, mh);
+            for (let i0 = 0; i0 < numPatches; i0 += CHUNK) {
+                const i1 = Math.min(numPatches, i0 + CHUNK);
+                for (let idx = i0; idx < i1; idx++) {
+                    const x = idx % w, y = Math.floor(idx / w);
+                    const v = mioRopeValue(x, y, w, h);
+                    const c = jetColormap(v);
+                    rctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+                    rctx.fillRect(x * (cell + gap), y * (cell + gap), cell, cell);
+                }
+                report(0.35 + 0.12 * (i1 / numPatches), 'Position encoding');
+                await mioYield();
+            }
+            mioRopeCanvas.width = mw; mioRopeCanvas.height = mh;
+
+            // --- Value ranges ---
+            const emb = currentData.embeddings;
+            let vmin = Infinity, vmax = -Infinity;
+            for (let i = 0; i < emb.length; i++) { const v = emb[i]; if (v < vmin) vmin = v; if (v > vmax) vmax = v; }
+            t5.vecMin = vmin; t5.vecMax = vmax;
+            const cls = currentData.clsVector;
+            if (cls) {
+                let cmin = Infinity, cmax = -Infinity;
+                for (let i = 0; i < cls.length; i++) { const v = cls[i]; if (v < cmin) cmin = v; if (v > cmax) cmax = v; }
+                t5.clsMin = cmin; t5.clsMax = cmax;
+            }
+            report(0.48, 'Building embedding heatmap');
+
+            // --- CLS tiny heatmap (dim x 1) ---
+            if (cls) {
+                t5.clsTiny.width = dim; t5.clsTiny.height = 1;
+                const cctx = t5.clsTiny.getContext('2d');
+                const cid = cctx.createImageData(dim, 1);
+                const c32 = new Uint32Array(cid.data.buffer);
+                const crange = (t5.clsMax - t5.clsMin) || 1;
+                for (let c = 0; c < dim; c++) {
+                    let q = ((cls[c] - t5.clsMin) / crange) * 255;
+                    q = q < 0 ? 0 : (q > 255 ? 255 : q);
+                    c32[c] = MIO_JET_U32[q | 0];
+                }
+                cctx.putImageData(cid, 0, 0);
+            }
+            mioClsCanvas.width = MIO_HM_W; mioClsCanvas.height = MIO_CLS_H;
+
+            // --- Patch-embedding heatmap ---
+            // Per-row display geometry: give each vector a visible band + gap between vectors.
+            const per = Math.max(2, Math.min(16, Math.floor(MIO_VEC_MAX_H / numPatches)));
+            const vgap = per >= 3 ? Math.max(1, Math.floor(per * 0.28)) : 0;
+            const rowH = per - vgap;
+            t5.vecPer = per; t5.vecGap = vgap; t5.vecRowH = rowH;
+
+            const totalH = numPatches * per;
+            const W = MIO_HM_W;
+            mioVecCanvas.width = W; mioVecCanvas.height = totalH;
+            mioVecOverlay.width = W; mioVecOverlay.height = totalH;
+            mioVecCount.textContent = `(${numPatches} × ${dim})`;
+
+            // Build the gapped, downscaled vector stack DIRECTLY into one ImageData using
+            // a precomputed column map + jet LUT + typed-array row copy. This replaces
+            // ~7500 scaled drawImage() calls (the old bottleneck) with a single tight
+            // loop + one putImageData, dropping build time from seconds to well under 1s.
+            const vdctx = mioVecCanvas.getContext('2d');
+            const vimg = vdctx.createImageData(W, totalH); // zero-filled => transparent gaps
+            const vv32 = new Uint32Array(vimg.data.buffer);
+            const colMap = new Int32Array(W);
+            for (let cx = 0; cx < W; cx++) colMap[cx] = Math.min(dim - 1, (cx * dim / W) | 0);
+            const rowBuf = new Uint32Array(W);
+            const vrange = (t5.vecMax - t5.vecMin) || 1;
+            const vscale = 255 / vrange;
+            const vlo = t5.vecMin;
+            const VCHUNK = 1500;
+            for (let p0 = 0; p0 < numPatches; p0 += VCHUNK) {
+                const p1 = Math.min(numPatches, p0 + VCHUNK);
+                for (let p = p0; p < p1; p++) {
+                    const eb = p * dim;
+                    for (let cx = 0; cx < W; cx++) {
+                        let q = (emb[eb + colMap[cx]] - vlo) * vscale;
+                        q = q < 0 ? 0 : (q > 255 ? 255 : q);
+                        rowBuf[cx] = MIO_JET_U32[q | 0];
+                    }
+                    const yTop = p * per;
+                    for (let ry = 0; ry < rowH; ry++) vv32.set(rowBuf, (yTop + ry) * W);
+                }
+                report(0.50 + 0.48 * (p1 / numPatches), 'Building embedding heatmap');
+                await mioYield();
+            }
+            vdctx.imageSmoothingEnabled = false;
+            vdctx.putImageData(vimg, 0, 0);
+
+            report(1.0, 'Done');
+            t5.built = true;
+        }
+
+        // Illustrative rotary/position field: combines a few spatial frequencies.
+        function mioRopeValue(x, y, w, h) {
+            const fx = x / Math.max(1, w - 1);
+            const fy = y / Math.max(1, h - 1);
+            const s = Math.sin(2 * Math.PI * (2 * fx))
+                + Math.cos(2 * Math.PI * (2 * fy))
+                + 0.5 * Math.sin(2 * Math.PI * (4 * fx + 4 * fy));
+            return 0.5 + 0.5 * (s / 2.5);
+        }
+
+        function mioRenderAll() {
+            if (!t5.built) { mioHint.textContent = 'Upload an image to begin.'; return; }
+            mioHint.textContent = 'Hover a patch or vector to link them; click to inspect.';
+            mioPaint();
+            requestAnimationFrame(mioDrawArrows);
+        }
+
+        // Redraw the small mosaic + RoPE canvases (cheap) with the current emphasis outline.
+        function mioDrawSmall() {
+            const cell = t5.cell, gap = t5.gap;
+            const pctx = mioPatchCanvas.getContext('2d');
+            pctx.clearRect(0, 0, mioPatchCanvas.width, mioPatchCanvas.height);
+            pctx.drawImage(t5.mosaicBase, 0, 0);
+            const rctx = mioRopeCanvas.getContext('2d');
+            rctx.clearRect(0, 0, mioRopeCanvas.width, mioRopeCanvas.height);
+            rctx.drawImage(t5.ropeBase, 0, 0);
+            if (typeof t5.emphasis === 'number') {
+                const x = t5.emphasis % t5.w, y = Math.floor(t5.emphasis / t5.w);
+                const dx = x * (cell + gap), dy = y * (cell + gap);
+                [pctx, rctx].forEach(ctx => {
+                    ctx.strokeStyle = 'cyan';
+                    ctx.lineWidth = Math.max(1.5, cell * 0.25);
+                    ctx.strokeRect(dx + 0.5, dy + 0.5, cell, cell);
+                });
+            }
+        }
+
+        // Draw only the emphasis outline for the (huge, static) vector heatmap on its overlay.
+        function mioDrawVecOverlay() {
+            const octx = mioVecOverlay.getContext('2d');
+            octx.clearRect(0, 0, mioVecOverlay.width, mioVecOverlay.height);
+            if (typeof t5.emphasis === 'number') {
+                const yy = t5.emphasis * t5.vecPer;
+                octx.strokeStyle = 'cyan';
+                octx.lineWidth = 2;
+                octx.strokeRect(1, yy - 0.5, MIO_HM_W - 2, t5.vecRowH + 1);
+            }
+        }
+
+        // Lightweight update on hover — never redraws the large vector base canvas.
+        function mioUpdateEmphasis() {
+            if (!t5.built) return;
+            mioDrawSmall();
+            mioClsCanvas.style.outline = (t5.emphasis === 'cls') ? '3px solid #06b6d4' : 'none';
+            mioDrawVecOverlay();
+            mioColorArrows();
+        }
+
+        // Full repaint (build / tab-show). The large vector base canvas is static
+        // (drawn once in mioBuildBases), so we only refresh the small CLS heatmap here.
+        function mioPaint() {
+            if (!t5.built) return;
+
+            const cctx = mioClsCanvas.getContext('2d');
+            cctx.imageSmoothingEnabled = false;
+            cctx.clearRect(0, 0, mioClsCanvas.width, mioClsCanvas.height);
+            if (currentData.clsVector) {
+                cctx.drawImage(t5.clsTiny, 0, 0, t5.dim, 1, 0, 0, MIO_HM_W, MIO_CLS_H);
+            }
+
+            mioUpdateEmphasis();
+        }
+
+        function mioDrawArrows() {
+            if (!t5.built) return;
+            const flowRect = mioFlow.getBoundingClientRect();
+            const W = mioFlow.scrollWidth, H = mioFlow.offsetHeight;
+            mioArrows.setAttribute('width', W);
+            mioArrows.setAttribute('height', H);
+            mioArrows.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+            const rectOf = (id) => {
+                const el = document.getElementById(id);
+                const r = el.getBoundingClientRect();
+                const l = r.left - flowRect.left, t = r.top - flowRect.top;
+                return { l, t, w: r.width, h: r.height, cx: l + r.width / 2, cy: t + r.height / 2, r: l + r.width, b: t + r.height };
+            };
+
+            const base = rectOf('mioBaseWrap'), patch = rectOf('mioPatchWrap'), rope = rectOf('mioRopeWrap');
+            const sum = rectOf('mioSumBlock'), enc = rectOf('mioEncBlock');
+            const cls = rectOf('mioClsWrap'), pvec = rectOf('mioPatchVecWrap');
+
+            const arrows = [
+                ['a-base-patch', base.r, base.cy, patch.l, patch.cy],
+                ['a-patch-sum', patch.r, patch.cy, sum.l, sum.cy],
+                ['a-rope-sum', rope.r, rope.cy, sum.l, sum.cy],
+                ['a-sum-enc', sum.r, sum.cy, enc.l, enc.cy],
+                ['a-enc-cls', enc.r, enc.cy, cls.l, cls.cy],
+                ['a-enc-pvec', enc.r, enc.cy, pvec.l, pvec.cy]
+            ];
+
+            // Cubic path with horizontal tangents at both ends so the arrow tip
+            // bends and enters straight (horizontally) into the destination.
+            const pathD = (x1, y1, x2, y2) => {
+                const k = Math.max(24, Math.abs(x2 - x1) * 0.45);
+                return `M ${x1} ${y1} C ${x1 + k} ${y1}, ${x2 - k} ${y2}, ${x2} ${y2}`;
+            };
+
+            mioArrows.innerHTML = `<defs>
+                <marker id="mioHead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                    <path d="M0,0 L6,3 L0,6 Z" fill="#94a3b8"></path>
+                </marker>
+                <marker id="mioHeadHi" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                    <path d="M0,0 L6,3 L0,6 Z" fill="#2563eb"></path>
+                </marker>
+            </defs>` + arrows.map(a =>
+                `<path id="${a[0]}" d="${pathD(a[1], a[2], a[3], a[4])}" fill="none" stroke="#94a3b8" stroke-width="2" marker-end="url(#mioHead)"></path>`
+            ).join('');
+            mioColorArrows();
+        }
+
+        function mioColorArrows() {
+            const hi = t5.emphasis !== null;
+            ['a-base-patch', 'a-patch-sum', 'a-rope-sum', 'a-sum-enc', 'a-enc-cls', 'a-enc-pvec'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.setAttribute('stroke', hi ? '#2563eb' : '#94a3b8');
+                el.setAttribute('stroke-width', hi ? '3.5' : '2');
+                el.setAttribute('marker-end', hi ? 'url(#mioHeadHi)' : 'url(#mioHead)');
+            });
+        }
+
+        function mioSetEmphasis(val, scrollVec) {
+            if (t5.emphasis === val) return;
+            t5.emphasis = val;
+            mioUpdateEmphasis();
+            if (scrollVec && typeof val === 'number') {
+                const cont = mioVecCanvas.closest('.overflow-auto');
+                if (cont) {
+                    const y = val * t5.vecPer;
+                    if (y < cont.scrollTop || y > cont.scrollTop + cont.clientHeight) {
+                        cont.scrollTop = y - cont.clientHeight / 2;
+                    }
+                }
+            }
+        }
+
+        function mioPatchAt(evt) {
+            const step = t5.cell + t5.gap;
+            const x = Math.floor(evt.offsetX / step), y = Math.floor(evt.offsetY / step);
+            if (x < 0 || y < 0 || x >= t5.w || y >= t5.h) return null;
+            return y * t5.w + x;
+        }
+
+        function mioAttachListeners() {
+            if (t5.listeners) return;
+            t5.listeners = true;
+
+            const onPatchMove = (e) => { const i = mioPatchAt(e); if (i !== null) mioSetEmphasis(i, true); };
+            mioPatchCanvas.addEventListener('mousemove', onPatchMove);
+            mioRopeCanvas.addEventListener('mousemove', onPatchMove);
+            mioPatchCanvas.addEventListener('mouseleave', () => mioSetEmphasis(null));
+            mioRopeCanvas.addEventListener('mouseleave', () => mioSetEmphasis(null));
+            mioPatchCanvas.addEventListener('click', (e) => { const i = mioPatchAt(e); if (i !== null) mioOpenModal('patch', i); });
+            mioRopeCanvas.addEventListener('click', (e) => { const i = mioPatchAt(e); if (i !== null) mioOpenModal('patch', i); });
+
+            mioVecCanvas.addEventListener('mousemove', (e) => {
+                const i = Math.floor(e.offsetY / t5.vecPer);
+                if (i >= 0 && i < t5.numPatches) mioSetEmphasis(i, false);
+            });
+            mioVecCanvas.addEventListener('mouseleave', () => mioSetEmphasis(null));
+            mioVecCanvas.addEventListener('click', (e) => {
+                const i = Math.floor(e.offsetY / t5.vecPer);
+                if (i >= 0 && i < t5.numPatches) mioOpenModal('patch', i);
+            });
+
+            mioClsCanvas.addEventListener('mouseenter', () => mioSetEmphasis('cls'));
+            mioClsCanvas.addEventListener('mouseleave', () => mioSetEmphasis(null));
+            mioClsCanvas.addEventListener('click', () => mioOpenModal('cls', null));
+
+            window.addEventListener('resize', () => { if (activeTab === 'tabModelIO' && t5.built) requestAnimationFrame(mioDrawArrows); });
+            document.addEventListener('keydown', (e) => { if (e.key === 'Escape') mioCloseModal(); });
+        }
+
+        // --- Modal inspector ---
+        function mioSamplePatchPixels(index, n) {
+            const r = patchRect(index);
+            const s = t5.imgScale || 1;
+            const sx = r.sx * s, sy = r.sy * s, sw = r.sw * s, sh = r.sh * s;
+            const img = t5.imgData, W = img.width, data = img.data;
+            const cells = [];
+            for (let j = 0; j < n; j++) {
+                for (let i = 0; i < n; i++) {
+                    const px = Math.min(W - 1, Math.floor(sx + (i + 0.5) / n * sw));
+                    const py = Math.min(img.height - 1, Math.floor(sy + (j + 0.5) / n * sh));
+                    const p = (py * W + px) * 4;
+                    cells.push([data[p] / 255, data[p + 1] / 255, data[p + 2] / 255]);
+                }
+            }
+            return cells;
+        }
+
+        function mioOpenModal(kind, index) {
+            if (!t5.built) return;
+            const titleEl = document.getElementById('mioModalTitle');
+            const pixelsEl = document.getElementById('mioModalPixels');
+            const pixelNote = document.getElementById('mioModalPixelNote');
+            const vectorEl = document.getElementById('mioModalVector');
+            const dimEl = document.getElementById('mioModalDim');
+            pixelsEl.innerHTML = '';
+            vectorEl.innerHTML = '';
+
+            let vec, vmin, vmax;
+            if (kind === 'cls') {
+                titleEl.textContent = 'CLS token inspector';
+                pixelsEl.style.gridTemplateColumns = '';
+                pixelNote.textContent = 'CLS is a learned classification token — it has no image patch.';
+                vec = currentData.clsVector; vmin = t5.clsMin; vmax = t5.clsMax;
+            } else {
+                const x = index % t5.w, y = Math.floor(index / t5.w);
+                titleEl.textContent = `Patch #${index}  (col ${x}, row ${y})`;
+                const n = Math.max(4, Math.min(16, currentData.patchSize || 16));
+                const pix = mioSamplePatchPixels(index, n);
+                const box = Math.max(26, Math.floor(560 / n));
+                pixelsEl.style.gridTemplateColumns = `repeat(${n}, ${box}px)`;
+                pixelNote.textContent = `${n}×${n} sampled pixels (values normalized 0–1)`;
+                pix.forEach(([r, g, b]) => {
+                    const d = document.createElement('div');
+                    d.style.width = box + 'px'; d.style.height = box + 'px';
+                    d.style.background = `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`;
+                    d.style.fontSize = Math.max(6, box / 5) + 'px';
+                    d.style.lineHeight = '1.05';
+                    d.style.color = (r * 0.299 + g * 0.587 + b * 0.114) > 0.5 ? '#000' : '#fff';
+                    d.className = 'flex flex-col items-center justify-center font-mono';
+                    d.innerHTML = `<span>${r.toFixed(2)}</span><span>${g.toFixed(2)}</span><span>${b.toFixed(2)}</span>`;
+                    pixelsEl.appendChild(d);
+                });
+                const base = index * t5.dim;
+                vec = currentData.embeddings.subarray(base, base + t5.dim);
+                vmin = t5.vecMin; vmax = t5.vecMax;
+            }
+
+            dimEl.textContent = vec ? `(${vec.length}-d)` : '';
+            if (vec) {
+                const range = (vmax - vmin) || 1;
+                const frag = document.createDocumentFragment();
+                for (let i = 0; i < vec.length; i++) {
+                    const t = (vec[i] - vmin) / range;
+                    const c = jetColormap(Math.max(0, Math.min(1, t)));
+                    const row = document.createElement('div');
+                    row.className = 'flex items-center font-mono';
+                    row.style.background = `rgb(${c[0]},${c[1]},${c[2]})`;
+                    row.style.color = (c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114) > 140 ? '#000' : '#fff';
+                    row.style.width = '150px';
+                    row.style.height = '16px';
+                    row.style.fontSize = '10px';
+                    row.innerHTML = `<span style="width:34px;text-align:right;padding-right:4px;opacity:.75">${i}</span><span>${vec[i].toFixed(4)}</span>`;
+                    frag.appendChild(row);
+                }
+                vectorEl.appendChild(frag);
+            }
+
+            mioModal.classList.remove('hidden');
+        }
+
+        function mioCloseModal() {
+            mioModal.classList.add('hidden');
         }
     </script>
 </body>
